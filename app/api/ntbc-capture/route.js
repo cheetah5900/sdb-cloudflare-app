@@ -582,48 +582,80 @@ export async function GET(request) {
 
                     if (captureType === 'bot-management') {
                         const botKeywords = ['super bot fight mode', 'bot fight mode', 'bot management'];
-                        let matchedHeading = null;
+                        let matchedEl = null;
                         let matchedName = '';
-                        const allHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span'));
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span, p'));
                         for (const kw of botKeywords) {
-                            const found = allHeadings.find(el => {
+                            const found = allElements.find(el => {
                                 const t = (el.textContent || '').trim().toLowerCase();
                                 const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
                                 return isVisible && t.includes(kw);
                             });
                             if (found) {
-                                matchedHeading = found;
+                                matchedEl = found;
                                 matchedName = kw;
                                 break;
                             }
                         }
 
-                        if (matchedHeading) {
-                            const headingRect = matchedHeading.getBoundingClientRect();
+                        if (matchedEl) {
+                            const card = matchedEl.closest('.setting-card, [class*="setting-card"], [class*="card"], section, [data-testid]') || 
+                                         matchedEl.parentElement?.closest('.setting-card, [class*="setting-card"], [class*="card"]') ||
+                                         matchedEl.parentElement?.parentElement;
+
+                            const cardRect = (card && card !== document.body) ? card.getBoundingClientRect() : matchedEl.getBoundingClientRect();
                             const scrollY = window.scrollY || window.pageYOffset || 0;
-
-                            const card = matchedHeading.closest('section') || 
-                                         matchedHeading.closest('[data-testid]') || 
-                                         matchedHeading.closest('[class*="card"]') || 
-                                         matchedHeading.closest('[class*="setting"]') ||
-                                         matchedHeading.closest('div[class*="border"]') ||
-                                         matchedHeading.parentElement?.parentElement ||
-                                         matchedHeading.parentElement;
-
-                            const cardRect = (card && card !== document.body) ? card.getBoundingClientRect() : headingRect;
                             
                             const parsedXS = parseInt(qXS, 10);
                             const parsedXE = parseInt(qXE, 10);
                             const parsedYS = parseInt(qYS, 10);
                             const parsedYE = parseInt(qYE, 10);
 
-                            // Anchor directly above the heading title and align with card left
-                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 15);
-                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(headingRect.top + scrollY) - 18);
-                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.max(700, Math.min(window.innerWidth - startX - 20, Math.round(cardRect.width) + 30));
-                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.max(120, Math.round(cardRect.height || 260) + 30);
+                            // Perfectly cover the entire card/box from its top-left border to bottom-right border
+                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 6);
+                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 6);
+                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth - startX, Math.round(cardRect.width) + 12);
+                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.round(cardRect.height) + 12;
 
                             return { x: startX, y: startY, width: targetWidth, height: targetHeight, matchedMode: matchedName };
+                        }
+                    }
+
+                    if (captureType === 'security-level') {
+                        const secKeywords = ['security level', 'browser integrity check', 'challenge passage'];
+                        let matchedEl = null;
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span, p'));
+                        for (const kw of secKeywords) {
+                            const found = allElements.find(el => {
+                                const t = (el.textContent || '').trim().toLowerCase();
+                                const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                                return isVisible && t.includes(kw);
+                            });
+                            if (found) {
+                                matchedEl = found;
+                                break;
+                            }
+                        }
+
+                        if (matchedEl) {
+                            const card = matchedEl.closest('.setting-card, [class*="setting-card"], [class*="card"], section, [data-testid]') || 
+                                         matchedEl.parentElement?.closest('.setting-card, [class*="setting-card"], [class*="card"]') ||
+                                         matchedEl.parentElement?.parentElement;
+
+                            const cardRect = (card && card !== document.body) ? card.getBoundingClientRect() : matchedEl.getBoundingClientRect();
+                            const scrollY = window.scrollY || window.pageYOffset || 0;
+                            
+                            const parsedXS = parseInt(qXS, 10);
+                            const parsedXE = parseInt(qXE, 10);
+                            const parsedYS = parseInt(qYS, 10);
+                            const parsedYE = parseInt(qYE, 10);
+
+                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 6);
+                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 6);
+                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth - startX, Math.round(cardRect.width) + 12);
+                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.round(cardRect.height) + 12;
+
+                            return { x: startX, y: startY, width: targetWidth, height: targetHeight };
                         }
                     }
                 const findLastElementByText = (selector, text) => {
