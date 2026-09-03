@@ -64,10 +64,26 @@ const SECTION_TARGETS = {
     }
 };
 
+function escapeXml(unsafe) {
+    return (unsafe || '').replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '&': return '&amp;';
+            case '\'': return '&apos;';
+            case '"': return '&quot;';
+            default: return c;
+        }
+    });
+}
+
 async function generateUnavailableImage(title, subtitle = 'ไม่พบข้อมูลหรือฟีเจอร์นี้ใน Cloudflare Zone / Account ปัจจุบัน') {
     // Strip emojis for pure font rendering compatibility
-    const cleanTitle = title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-    const cleanSubtitle = subtitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+    let cleanTitle = title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+    let cleanSubtitle = subtitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+
+    cleanTitle = escapeXml(cleanTitle);
+    cleanSubtitle = escapeXml(cleanSubtitle);
 
     const svg = `
     <svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
