@@ -91,24 +91,24 @@ export default function ControlPage() {
      const [captureSpeed, setCaptureSpeed] = useState(true);
 
      const [coords, setCoords] = useState({
-         domains: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         dns: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         traffic: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         firewall: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         securityRules: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         argo: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         speed: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         speedMobile: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         botManagement: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         securityLevel: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         sslOverview: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         sslEdge: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         rateLimiting: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         managedRules: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         ipAccess: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         zoneLockdown: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         trafficCountries: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
-         topEventsSource: { xStart: '', xEnd: '', yStart: '', yEnd: '' }
+         domains: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         dns: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         traffic: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         firewall: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         securityRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         argo: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         speed: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         speedMobile: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         botManagement: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         securityLevel: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         sslOverview: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         sslEdge: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         rateLimiting: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         managedRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         ipAccess: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         zoneLockdown: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         trafficCountries: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         topEventsSource: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' }
      });
 
     const pullFromImageSizeSettings = (e) => {
@@ -227,8 +227,8 @@ export default function ControlPage() {
                           <span className="text-[10px] text-cyan-400 font-mono font-medium">Xstart (Offset)</span>
                           <input 
                               type="text"
-                              placeholder="Auto (+0)"
-                              value={coords[key]?.xStart || ''}
+                              placeholder="0"
+                              value={coords[key]?.xStart ?? '0'}
                               onChange={(e) => {
                                   const val = e.target.value;
                                   if (/^-?\d*$/.test(val)) {
@@ -242,8 +242,8 @@ export default function ControlPage() {
                           <span className="text-[10px] text-cyan-400 font-mono font-medium">Xend (Offset)</span>
                           <input 
                               type="text"
-                              placeholder="Auto (+0)"
-                              value={coords[key]?.xEnd || ''}
+                              placeholder="0"
+                              value={coords[key]?.xEnd ?? '0'}
                               onChange={(e) => {
                                   const val = e.target.value;
                                   if (/^-?\d*$/.test(val)) {
@@ -254,21 +254,26 @@ export default function ControlPage() {
                           />
                       </div>
                       <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400 font-mono font-medium">Ystart</span>
+                          <span className="text-[10px] text-cyan-400 font-mono font-medium">Ystart (Offset)</span>
                           <input 
-                              type="number"
-                              placeholder="Auto"
-                              value={coords[key]?.yStart || ''}
-                              onChange={(e) => handleCoordChange(key, 'yStart', e.target.value)}
-                              className="bg-gray-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full"
+                              type="text"
+                              placeholder="0"
+                              value={coords[key]?.yStart ?? '0'}
+                              onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (/^-?\d*$/.test(val)) {
+                                      handleCoordChange(key, 'yStart', val);
+                                  }
+                              }}
+                              className="bg-gray-950/80 border border-cyan-800/40 rounded px-2 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                           />
                       </div>
                       <div className="flex flex-col gap-1">
                           <span className="text-[10px] text-cyan-400 font-mono font-medium">Yend (Offset)</span>
                           <input 
                               type="text"
-                              placeholder="Auto (+0)"
-                              value={coords[key]?.yEnd || ''}
+                              placeholder="0"
+                              value={coords[key]?.yEnd ?? '0'}
                               onChange={(e) => {
                                   const val = e.target.value;
                                   if (/^-?\d*$/.test(val)) {
@@ -596,14 +601,24 @@ export default function ControlPage() {
                 .catch(e => {
                     console.error('Failed to load global coords:', e);
                     const defaultCoords = {
-                        domains: { xStart: '395', xEnd: '1785', yStart: '115', yEnd: '' },
-                        dns: { xStart: '365', xEnd: '1843', yStart: '95', yEnd: '' },
-                        traffic: { xStart: '422', xEnd: '1766', yStart: '105', yEnd: '1005' },
-                        firewall: { xStart: '288', xEnd: '1728', yStart: '115', yEnd: '815' },
-                        securityRules: { xStart: '288', xEnd: '1920', yStart: '115', yEnd: '815' },
-                        argo: { xStart: '480', xEnd: '1632', yStart: '95', yEnd: '850' },
-                        speed: { xStart: '480', xEnd: '1632', yStart: '95', yEnd: '850' },
-                        speedMobile: { xStart: '480', xEnd: '1632', yStart: '95', yEnd: '850' }
+                        domains: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        dns: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        traffic: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        firewall: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        securityRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        argo: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        speed: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        speedMobile: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        botManagement: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        securityLevel: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        sslOverview: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        sslEdge: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        rateLimiting: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        managedRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        ipAccess: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        zoneLockdown: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        trafficCountries: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+                        topEventsSource: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' }
                     };
                     setCoords(defaultCoords);
                 });
@@ -1867,8 +1882,8 @@ export default function ControlPage() {
                                                                     </span>
                                                                     <input
                                                                         type="text"
-                                                                        placeholder="Auto (+0)"
-                                                                        value={coords[activeCaptureTab]?.xStart || ''}
+                                                                        placeholder="0"
+                                                                        value={coords[activeCaptureTab]?.xStart ?? '0'}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
                                                                             if (/^-?\d*$/.test(val)) {
@@ -1884,8 +1899,8 @@ export default function ControlPage() {
                                                                     </span>
                                                                     <input
                                                                         type="text"
-                                                                        placeholder="Auto (+0)"
-                                                                        value={coords[activeCaptureTab]?.xEnd || ''}
+                                                                        placeholder="0"
+                                                                        value={coords[activeCaptureTab]?.xEnd ?? '0'}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
                                                                             if (/^-?\d*$/.test(val)) {
@@ -1901,8 +1916,8 @@ export default function ControlPage() {
                                                                     </span>
                                                                     <input
                                                                         type="text"
-                                                                        placeholder="Auto (+0)"
-                                                                        value={coords[activeCaptureTab]?.yStart || ''}
+                                                                        placeholder="0"
+                                                                        value={coords[activeCaptureTab]?.yStart ?? '0'}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
                                                                             if (/^-?\d*$/.test(val)) {
@@ -1918,8 +1933,8 @@ export default function ControlPage() {
                                                                     </span>
                                                                     <input
                                                                         type="text"
-                                                                        placeholder="Auto (+0)"
-                                                                        value={coords[activeCaptureTab]?.yEnd || ''}
+                                                                        placeholder="0"
+                                                                        value={coords[activeCaptureTab]?.yEnd ?? '0'}
                                                                         onChange={(e) => {
                                                                             const val = e.target.value;
                                                                             if (/^-?\d*$/.test(val)) {
