@@ -2542,8 +2542,8 @@ export async function POST(request) {
             const pages = await browser.pages();
             let page = pages.find(p => p.url().includes('cloudflare.com')) || pages[0];
             if (!page) {
-                await browser.disconnect();
-                return NextResponse.json({ success: false, error: 'No active browser page found.' }, { status: 400 });
+                console.log('No active browser tab found. Automatically opening new page...');
+                page = await browser.newPage();
             }
 
             // Bring to front

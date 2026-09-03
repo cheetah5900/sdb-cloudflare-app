@@ -307,10 +307,11 @@ export async function GET(request) {
         const browser = await connectChrome();
         const pages = await browser.pages();
         // Find page with cloudflare, otherwise use the first page
-        const page = pages.find(p => p.url().includes('cloudflare.com')) || pages[0];
+        let page = pages.find(p => p.url().includes('cloudflare.com')) || pages[0];
 
         if (!page) {
-            return Response.json({ success: false, error: 'No active browser page found' }, { status: 400 });
+            console.log('No active browser tab found. Automatically opening new page...');
+            page = await browser.newPage();
         }
 
         // Force viewport size to 1920x1080 to match browser window size inside VNC container

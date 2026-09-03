@@ -23,8 +23,8 @@ export async function GET(request) {
         let page = pages.find(p => p.url().includes('cloudflare.com')) || pages[0];
 
         if (!page) {
-            await browser.disconnect();
-            return Response.json({ success: false, error: 'No active browser page found. Please start Step 1.' }, { status: 400 });
+            console.log('No active browser tab found. Automatically opening new page...');
+            page = await browser.newPage();
         }
 
         // Force viewport size to 1920x1080 to match browser window size inside VNC container
