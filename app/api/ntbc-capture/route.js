@@ -537,7 +537,8 @@ export async function GET(request) {
             // Evaluate coordinates for post-capture cropping (no viewport clipping)
             console.log('Calculating bounding box coordinates on active page...');
             let cropCoords = null;
-            if (qXStart && qXEnd && qYStart && qYEnd && type !== 'domains' && type !== 'dns') {
+            const dynamicCardTypes = ['bot-management', 'security-level', 'rate-limiting', 'managed-rules', 'zone-lockdown', 'ip-access-rules', 'ssl-overview', 'ssl-edge', 'domains', 'dns'];
+            if (qXStart && qXEnd && qYStart && qYEnd && !dynamicCardTypes.includes(type)) {
                 const xs = parseInt(qXStart, 10);
                 const xe = parseInt(qXEnd, 10);
                 const ys = parseInt(qYStart, 10);
@@ -598,29 +599,31 @@ export async function GET(request) {
                         }
 
                         if (matchedHeading) {
+                            const headingRect = matchedHeading.getBoundingClientRect();
+                            const scrollY = window.scrollY || window.pageYOffset || 0;
+
                             const card = matchedHeading.closest('section') || 
                                          matchedHeading.closest('[data-testid]') || 
                                          matchedHeading.closest('[class*="card"]') || 
                                          matchedHeading.closest('[class*="setting"]') ||
+                                         matchedHeading.closest('div[class*="border"]') ||
                                          matchedHeading.parentElement?.parentElement ||
                                          matchedHeading.parentElement;
 
-                            if (card) {
-                                const cardRect = card.getBoundingClientRect();
-                                const scrollY = window.scrollY || window.pageYOffset || 0;
-                                
-                                const parsedXS = parseInt(qXS, 10);
-                                const parsedXE = parseInt(qXE, 10);
-                                const parsedYS = parseInt(qYS, 10);
-                                const parsedYE = parseInt(qYE, 10);
+                            const cardRect = (card && card !== document.body) ? card.getBoundingClientRect() : headingRect;
+                            
+                            const parsedXS = parseInt(qXS, 10);
+                            const parsedXE = parseInt(qXE, 10);
+                            const parsedYS = parseInt(qYS, 10);
+                            const parsedYE = parseInt(qYE, 10);
 
-                                const x = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 20);
-                                const y = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 15);
-                                const width = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth, Math.round(cardRect.width) + 40);
-                                const height = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.max(120, Math.round(cardRect.height) + 30);
+                            // Anchor directly above the heading title and align with card left
+                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 15);
+                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(headingRect.top + scrollY) - 18);
+                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.max(700, Math.min(window.innerWidth - startX - 20, Math.round(cardRect.width) + 30));
+                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.max(120, Math.round(cardRect.height || 260) + 30);
 
-                                return { x, y, width, height, matchedMode: matchedName };
-                            }
+                            return { x: startX, y: startY, width: targetWidth, height: targetHeight, matchedMode: matchedName };
                         }
                     }
                 const findLastElementByText = (selector, text) => {
