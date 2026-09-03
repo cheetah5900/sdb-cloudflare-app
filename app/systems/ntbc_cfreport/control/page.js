@@ -234,13 +234,18 @@ export default function ControlPage() {
                           />
                       </div>
                       <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400 font-mono font-medium">Xend</span>
+                          <span className="text-[10px] text-cyan-400 font-mono font-medium">Xend (Offset)</span>
                           <input 
-                              type="number"
-                              placeholder="Auto"
+                              type="text"
+                              placeholder="Auto (+0)"
                               value={coords[key]?.xEnd || ''}
-                              onChange={(e) => handleCoordChange(key, 'xEnd', e.target.value)}
-                              className="bg-gray-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full"
+                              onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (/^-?\d*$/.test(val)) {
+                                      handleCoordChange(key, 'xEnd', val);
+                                  }
+                              }}
+                              className="bg-gray-950/80 border border-cyan-800/40 rounded px-2 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                           />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -254,7 +259,7 @@ export default function ControlPage() {
                           />
                       </div>
                       <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400 font-mono font-medium">Yend (Offset)</span>
+                          <span className="text-[10px] text-cyan-400 font-mono font-medium">Yend (Offset)</span>
                           <input 
                               type="text"
                               placeholder="Auto (+0)"
@@ -265,7 +270,7 @@ export default function ControlPage() {
                                       handleCoordChange(key, 'yEnd', val);
                                   }
                               }}
-                              className="bg-gray-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full"
+                              className="bg-gray-950/80 border border-cyan-800/40 rounded px-2 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                           />
                       </div>
                   </div>
@@ -1885,13 +1890,20 @@ export default function ControlPage() {
                                                                     />
                                                                 </div>
                                                                 <div className="flex flex-col gap-1">
-                                                                    <span className="text-[10px] text-gray-400 font-mono font-medium">Xend</span>
+                                                                    <span className="text-[10px] text-cyan-400 font-mono font-medium flex items-center gap-1">
+                                                                        Xend (Offset)
+                                                                    </span>
                                                                     <input
-                                                                        type="number"
-                                                                        placeholder="Auto"
+                                                                        type="text"
+                                                                        placeholder="Auto (+0)"
                                                                         value={coords[activeCaptureTab]?.xEnd || ''}
-                                                                        onChange={(e) => handleCoordChange(activeCaptureTab, 'xEnd', e.target.value)}
-                                                                        className="bg-gray-950/90 border border-gray-800 rounded px-2.5 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full font-mono"
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            if (/^-?\d*$/.test(val)) {
+                                                                                handleCoordChange(activeCaptureTab, 'xEnd', val);
+                                                                            }
+                                                                        }}
+                                                                        className="bg-gray-950/90 border border-cyan-800/40 rounded px-2.5 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                                                                     />
                                                                 </div>
                                                                 <div className="flex flex-col gap-1">
@@ -1912,8 +1924,8 @@ export default function ControlPage() {
                                                                     />
                                                                 </div>
                                                                 <div className="flex flex-col gap-1">
-                                                                    <span className={`text-[10px] font-mono font-medium flex items-center gap-1 ${isDynamicTab ? 'text-cyan-400' : 'text-gray-400'}`}>
-                                                                        {isDynamicTab ? 'Yend (Offset)' : 'Yend'}
+                                                                    <span className="text-[10px] text-cyan-400 font-mono font-medium flex items-center gap-1">
+                                                                        Yend (Offset)
                                                                     </span>
                                                                     <input
                                                                         type="text"
@@ -1925,7 +1937,7 @@ export default function ControlPage() {
                                                                                 handleCoordChange(activeCaptureTab, 'yEnd', val);
                                                                             }
                                                                         }}
-                                                                        className={`bg-gray-950/90 border rounded px-2.5 py-1 text-xs focus:outline-none transition-colors w-full font-mono ${isDynamicTab ? 'border-cyan-800/40 text-cyan-200 focus:border-cyan-500/50' : 'border-gray-800 text-gray-200 focus:border-rose-500/50'}`}
+                                                                        className="bg-gray-950/90 border border-cyan-800/40 rounded px-2.5 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                                                                     />
                                                                 </div>
                                                             </div>
