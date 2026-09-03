@@ -28,9 +28,9 @@ const FILE_MAPPING = {
 
 const SECTION_TARGETS = {
     'bot-management': {
-        title: '🤖 Bot Management',
-        keywords: ['bot management', 'bot fight mode', 'super bot fight mode', 'bot protection', 'fight bots', 'bots'],
-        description: 'ไม่พบเมนูหรือการตั้งค่า Bot Management ในแพ็กเกจหรือ Account Cloudflare ปัจจุบัน'
+        title: '🤖 Bot Management / Fight Mode',
+        keywords: ['super bot fight mode', 'bot fight mode', 'bot management'],
+        description: 'ไม่พบโหมด Bot Fight Mode, Super Bot Fight Mode หรือ Bot Management ใน Cloudflare Account/Zone นี้'
     },
     'security-level': {
         title: '🛡️ Security Level & Settings',
@@ -566,6 +566,51 @@ export async function GET(request) {
                         const height = Math.max(100, Math.round((fRect.bottom || 480) - (hRect.top - 20) + offsetVal));
                         
                         return { x, y, width, height };
+                    }
+
+                    if (captureType === 'bot-management') {
+                        const botKeywords = ['super bot fight mode', 'bot fight mode', 'bot management'];
+                        let matchedHeading = null;
+                        let matchedName = '';
+                        const allHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span'));
+                        for (const kw of botKeywords) {
+                            const found = allHeadings.find(el => {
+                                const t = (el.textContent || '').trim().toLowerCase();
+                                const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                                return isVisible && t.includes(kw);
+                            });
+                            if (found) {
+                                matchedHeading = found;
+                                matchedName = kw;
+                                break;
+                            }
+                        }
+
+                        if (matchedHeading) {
+                            const card = matchedHeading.closest('section') || 
+                                         matchedHeading.closest('[data-testid]') || 
+                                         matchedHeading.closest('[class*="card"]') || 
+                                         matchedHeading.closest('[class*="setting"]') ||
+                                         matchedHeading.parentElement?.parentElement ||
+                                         matchedHeading.parentElement;
+
+                            if (card) {
+                                const cardRect = card.getBoundingClientRect();
+                                const scrollY = window.scrollY || window.pageYOffset || 0;
+                                
+                                const parsedXS = parseInt(qXS, 10);
+                                const parsedXE = parseInt(qXE, 10);
+                                const parsedYS = parseInt(qYS, 10);
+                                const parsedYE = parseInt(qYE, 10);
+
+                                const x = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 20);
+                                const y = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 15);
+                                const width = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth, Math.round(cardRect.width) + 40);
+                                const height = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.max(120, Math.round(cardRect.height) + 30);
+
+                                return { x, y, width, height, matchedMode: matchedName };
+                            }
+                        }
                     }
                 const findLastElementByText = (selector, text) => {
                     const elements = Array.from(document.querySelectorAll(selector));
