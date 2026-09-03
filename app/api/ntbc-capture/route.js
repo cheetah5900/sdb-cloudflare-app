@@ -755,85 +755,82 @@ export async function GET(request) {
                     }
                 }
 
-                let startX;
+                let autoStartX;
+                if (captureType === 'domains') {
+                    autoStartX = Math.round(window.innerWidth * 0.18) + 50;
+                } else if (captureType === 'dns') {
+                    autoStartX = Math.round(window.innerWidth * 0.19);
+                } else if (captureType === 'traffic') {
+                    autoStartX = Math.round(window.innerWidth * 0.22);
+                } else if (captureType === 'firewall' || captureType === 'security-rules') {
+                    autoStartX = Math.round(window.innerWidth * 0.15);
+                } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
+                    autoStartX = Math.round(window.innerWidth * 0.25);
+                } else {
+                    autoStartX = Math.round(window.innerWidth * 0.15);
+                }
+
                 const parsedXS = parseInt(qXS, 10);
-                if (!isNaN(parsedXS)) {
-                    startX = parsedXS;
+                const startX = !isNaN(parsedXS) 
+                    ? ((parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + parsedXS))
+                    : autoStartX;
+
+                let autoEndX;
+                if (captureType === 'domains') {
+                    autoEndX = Math.round(window.innerWidth * 0.93);
+                } else if (captureType === 'dns') {
+                    autoEndX = Math.round(window.innerWidth * 0.96);
+                } else if (captureType === 'traffic') {
+                    autoEndX = Math.round(window.innerWidth * 0.92);
+                } else if (captureType === 'firewall') {
+                    autoEndX = Math.round(window.innerWidth * 0.90);
+                } else if (captureType === 'security-rules') {
+                    autoEndX = Math.round(window.innerWidth * 1.00);
+                } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
+                    autoEndX = Math.round(window.innerWidth * 0.85);
                 } else {
-                    startX = Math.round(window.innerWidth * 0.15);
-                    if (captureType === 'domains') {
-                        startX = Math.round(window.innerWidth * 0.18) + 50;
-                    } else if (captureType === 'dns') {
-                        startX = Math.round(window.innerWidth * 0.19);
-                    } else if (captureType === 'traffic') {
-                        startX = Math.round(window.innerWidth * 0.22);
-                    } else if (captureType === 'firewall' || captureType === 'security-rules') {
-                        startX = Math.round(window.innerWidth * 0.15);
-                    } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
-                        startX = Math.round(window.innerWidth * 0.25);
-                    }
+                    autoEndX = Math.round(window.innerWidth * 0.90);
                 }
 
-                let endX;
                 const parsedXE = parseInt(qXE, 10);
-                if (!isNaN(parsedXE)) {
-                    endX = parsedXE;
-                } else {
-                    endX = Math.round(window.innerWidth * 0.90);
-                    if (captureType === 'domains') {
-                        endX = Math.round(window.innerWidth * 0.93);
-                    } else if (captureType === 'dns') {
-                        endX = Math.round(window.innerWidth * 0.96);
-                    } else if (captureType === 'traffic') {
-                        endX = Math.round(window.innerWidth * 0.92);
-                    } else if (captureType === 'firewall') {
-                        endX = Math.round(window.innerWidth * 0.90);
-                    } else if (captureType === 'security-rules') {
-                        endX = Math.round(window.innerWidth * 1.00);
-                    } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
-                        endX = Math.round(window.innerWidth * 0.85);
-                    }
-                }
+                const endX = !isNaN(parsedXE)
+                    ? ((parsedXE > 500) ? parsedXE : autoEndX + parsedXE)
+                    : autoEndX;
 
-                let headingAnchorY = Math.max(0, Math.round(headingTop - 20));
-                let startY;
+                const headingAnchorY = Math.max(0, Math.round(headingTop - 20));
                 const parsedYS = parseInt(qYS, 10);
-                if (!isNaN(parsedYS)) {
-                    // Ystart is treated as offset relative to heading title anchor
-                    startY = Math.max(0, headingAnchorY + parsedYS);
+                const startY = !isNaN(parsedYS)
+                    ? ((parsedYS > 500) ? parsedYS : Math.max(0, headingAnchorY + parsedYS))
+                    : headingAnchorY;
+
+                let autoHeight;
+                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown'].includes(captureType);
+                if (isDynamic) {
+                    autoHeight = Math.max(100, (absoluteBottom - startY) + 20);
+                } else if (captureType === 'traffic') {
+                    autoHeight = 900;
+                } else if (captureType === 'firewall') {
+                    autoHeight = 700;
+                } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
+                    autoHeight = 750;
                 } else {
-                    startY = headingAnchorY;
+                    autoHeight = Math.max(150, (absoluteBottom - startY));
                 }
 
-                let targetHeight;
-                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown'].includes(captureType);
                 const parsedYE = parseInt(qYE, 10);
-                
-                if (isDynamic) {
-                    let offsetVal = 20;
-                    if (!isNaN(parsedYE)) {
-                        offsetVal = 20 + parsedYE;
-                    }
-                    targetHeight = Math.max(100, (absoluteBottom - startY) + offsetVal);
+                let targetHeight;
+                if (!isNaN(parsedYE)) {
+                    targetHeight = (parsedYE > 500) 
+                        ? Math.max(10, parsedYE - startY)
+                        : Math.max(100, autoHeight + parsedYE);
                 } else {
-                    if (!isNaN(parsedYE)) {
-                        targetHeight = Math.max(10, parsedYE - startY);
-                    } else {
-                        targetHeight = Math.max(150, (absoluteBottom - startY));
-                        if (captureType === 'traffic') {
-                            targetHeight = 900;
-                        } else if (captureType === 'firewall') {
-                            targetHeight = 700;
-                        } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
-                            targetHeight = 750;
-                        }
-                    }
+                    targetHeight = autoHeight;
                 }
 
                 return {
                     x: startX,
                     y: startY,
-                    width: endX - startX,
+                    width: Math.max(10, endX - startX),
                     height: targetHeight
                 };
             }, type, qXStart, qXEnd, qYStart, qYEnd);

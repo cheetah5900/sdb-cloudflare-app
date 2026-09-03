@@ -91,24 +91,24 @@ export default function ControlPage() {
      const [captureSpeed, setCaptureSpeed] = useState(true);
 
      const [coords, setCoords] = useState({
-         domains: { xStart: '255', xEnd: '1610', yStart: '38', yEnd: '' },
-         dns: { xStart: '365', xEnd: '1843', yStart: '95', yEnd: '' },
-         traffic: { xStart: '422', xEnd: '1766', yStart: '105', yEnd: '1005' },
-         firewall: { xStart: '288', xEnd: '1728', yStart: '115', yEnd: '980' },
-         securityRules: { xStart: '350', xEnd: '1880', yStart: '85', yEnd: '' },
-         argo: { xStart: '520', xEnd: '1632', yStart: '90', yEnd: '600' },
-         speed: { xStart: '480', xEnd: '1632', yStart: '115', yEnd: '870' },
-         speedMobile: { xStart: '480', xEnd: '1632', yStart: '95', yEnd: '850' },
-         botManagement: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '750' },
-         securityLevel: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '850' },
-         sslOverview: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '800' },
-         sslEdge: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '900' },
-         rateLimiting: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '' },
-         managedRules: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '' },
-         ipAccess: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '' },
-         zoneLockdown: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '' },
-         trafficCountries: { xStart: '350', xEnd: '1880', yStart: '100', yEnd: '950' },
-         topEventsSource: { xStart: '288', xEnd: '1728', yStart: '100', yEnd: '950' }
+         domains: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         dns: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         traffic: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         firewall: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         securityRules: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         argo: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         speed: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         speedMobile: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         botManagement: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         securityLevel: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         sslOverview: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         sslEdge: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         rateLimiting: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         managedRules: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         ipAccess: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         zoneLockdown: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         trafficCountries: { xStart: '', xEnd: '', yStart: '', yEnd: '' },
+         topEventsSource: { xStart: '', xEnd: '', yStart: '', yEnd: '' }
      });
 
     const pullFromImageSizeSettings = (e) => {
@@ -1955,29 +1955,18 @@ export default function ControlPage() {
                                                             </div>
 
                                                             <div className="pt-2">
-                                                                {isDynamicTab ? (
-                                                                    <div className="text-[11px] text-cyan-300/90 bg-cyan-950/30 border border-cyan-800/50 rounded-lg p-2.5 space-y-1">
-                                                                        <div className="font-semibold flex items-center gap-1.5 text-cyan-200">
-                                                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-cyan-500/20 border border-cyan-500/40 text-cyan-300">📏 Dynamic Content Height</span>
-                                                                            <span>แท็บนี้แคปภาพตามความยาวของเนื้อหา/ตารางจริงอัตโนมัติ</span>
-                                                                        </div>
-                                                                        <p className="text-[10px] text-gray-300">
-                                                                            • <strong>Ystart (Offset)</strong>: ยึดส่วนบนสุดจาก <strong>ชื่อหัวข้อ (Title Heading)</strong> เสมอ | ใส่ค่า +/- เพื่อขยับขึ้น/ลง
-                                                                        </p>
-                                                                        <p className="text-[10px] text-gray-300">
-                                                                            • <strong>Yend (Offset)</strong>: ยึดส่วนล่างสุดจาก <strong>ท้ายตารางจริง</strong> เสมอ | ใส่ค่า +/- เพื่อขยายหรือลดระยะจากท้ายตาราง (ว่าง = Auto)
-                                                                        </p>
+                                                                <div className="text-[11px] text-cyan-300/90 bg-cyan-950/30 border border-cyan-800/50 rounded-lg p-2.5 space-y-1">
+                                                                    <div className="font-semibold flex items-center gap-1.5 text-cyan-200">
+                                                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-cyan-500/20 border border-cyan-500/40 text-cyan-300">📏 Smart Auto Crop & Offset</span>
+                                                                        <span>ทุกแท็บตัดครอบภาพตามขนาดองค์ประกอบ/ตาราง/การ์ดจริงอัตโนมัติ</span>
                                                                     </div>
-                                                                ) : (
-                                                                    <div className="text-[11px] text-gray-300/90 bg-gray-900/60 border border-gray-800 rounded-lg p-2.5 space-y-1">
-                                                                        <p className="text-[10px] text-gray-300">
-                                                                            • <strong>Ystart (Offset)</strong>: ยึดส่วนบนสุดจาก <strong>ชื่อหัวข้อ (Title Heading)</strong> เสมอ (ว่าง = Auto พอดีหัวข้อ)
-                                                                        </p>
-                                                                        <p className="text-[10px] text-gray-400">
-                                                                            * ควบคุม Sidebar กางออกเสมอ (1920×1080) เพื่อพิกัดที่คงที่ทุกครั้ง | ปรับพิกัดแล้วกดปุ่ม "Capture This Page Now"
-                                                                        </p>
-                                                                    </div>
-                                                                )}
+                                                                    <p className="text-[10px] text-gray-300">
+                                                                        • <strong>Xstart / Xend (Offset)</strong>: ปรับระยะแนวนอนจากกรอบที่ตรวจจับได้ (ใส่ +/- เพื่อขยับหรือขยาย, ว่าง = Auto พอดีกรอบ)
+                                                                    </p>
+                                                                    <p className="text-[10px] text-gray-300">
+                                                                        • <strong>Ystart / Yend (Offset)</strong>: ปรับระยะแนวตั้งจากหัวข้อและท้ายตาราง (ใส่ +/- เพื่อขยับขึ้น/ลงหรือขยาย, ว่าง = Auto พอดีกรอบ)
+                                                                    </p>
+                                                                </div>
                                                             </div>
                                                         </>
                                                     );
