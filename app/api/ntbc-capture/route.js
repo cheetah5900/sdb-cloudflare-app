@@ -839,70 +839,256 @@ export async function GET(request) {
             }, type, qXStart, qXEnd, qYStart, qYEnd);
             }
 
-            // Retrieve document height to expand the viewport temporarily and prevent visual flickering from fullPage: true
-            const originalViewportSize = await page.evaluate(() => {
-                return {
-                    width: window.innerWidth,
-                    height: window.innerHeight,
-                    documentHeight: Math.max(
-                        document.body.scrollHeight,
-                        document.documentElement.scrollHeight,
-                        document.body.offsetHeight,
-                        document.documentElement.offsetHeight,
-                        window.innerHeight
-                    )
+            let pageBuffer = null;
+
+            if (type === 'bot-management' || type === 'security-level') {
+                console.log(`Targeting [${type}] via Exact Card Box Clip...`);
+                const isBot = type === 'bot-management';
+                const keywords = isBot 
+                    ? ['super bot fight mode', 'bot fight mode', 'bot management'] 
+                    : ['security level', 'browser integrity check', 'challenge passage'];
+
+                const findCardClip = async () => {
+                    return await page.evaluate((kws) => {
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span, p'));
+                        for (const kw of kws) {
+                            const found = allElements.find(el => {
+                                const t = (el.textContent || '').trim().toLowerCase();
+                                const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                                return isVisible && t.includes(kw) && (el.children.length === 0 || el.tagName.startsWith('H'));
+                            });
+                            if (found) {
+                                const headingRect = found.getBoundingClientRect();
+                                const scrollY = window.scrollY || window.pageYOffset || 0;
+                                
+                                let card = found.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], section');
+                                if (!card) {
+                                    let cur = found;
+                                    while (cur && cur !== document.body) {
+                                        const s = window.getComputedStyle(cur);
+                                        if (s.borderWidth !== '0px' && s.borderStyle !== 'none' && cur.offsetWidth > 300) {
+                                            card = cur;
+                                            break;
+                                        }
+                                        cur = cur.parentElement;
+                                    }
+                                }
+
+                                const cardRect = card ? card.getBoundingClientRect() : headingRect;
+                                
+                                const startX = Math.max(0, Math.min(cardRect.left - 90, headingRect.left - 126));
+                                const startY = Math.max(0, Math.min(cardRect.top + scrollY - 20, headingRect.top + scrollY - 52));
+                                const cardWidth = 935;
+                                const cardHeight = Math.max(350, (cardRect.height > 200 ? cardRect.height : 462) + 8);
+
+                                return {
+                                    x: Math.floor(startX),
+                                    y: Math.floor(startY),
+                                    width: Math.ceil(cardWidth),
+                                    height: Math.ceil(cardHeight)
+                                };
+                            }
+                        }
+                        return null;
+                    }, keywords);
                 };
-            });
 
-            if (type !== 'domains') {
-                console.log(`Temporarily resizing viewport height from ${originalViewportSize.height} to ${originalViewportSize.documentHeight} for full page capture...`);
-                await page.setViewport({
-                    width: originalViewportSize.width,
-                    height: originalViewportSize.documentHeight
+                let clipBox = await findCardClip();
+
+                if (!clipBox && isBot) {
+                    const currentUrl = page.url();
+                    let altUrl = null;
+                    if (currentUrl.includes('/security/settings')) {
+                        altUrl = currentUrl.replace('/security/settings', '/security/bots');
+                    } else if (currentUrl.includes('/security/bots')) {
+                        altUrl = currentUrl.replace('/security/bots', '/security/settings');
+                    }
+
+                    if (altUrl) {
+                        console.log(`Bot card not found on ${currentUrl}. Trying alternate page: ${altUrl}...`);
+                        try {
+                            await page.goto(altUrl, { waitUntil: 'networkidle2', timeout: 8000 });
+                            await new Promise(r => setTimeout(r, 1000));
+                            clipBox = await findCardClip();
+                        } catch (navErr) {
+                            console.warn('Could not navigate to alternate bot URL:', navErr.message);
+                        }
+                    }
+                }
+
+                if (clipBox) {
+                    await new Promise(r => setTimeout(r, 300));
+                    const cardScreenshotBase64 = await page.screenshot({ clip: clipBox, encoding: 'base64', type: 'png' });
+                    pageBuffer = Buffer.from(cardScreenshotBase64, 'base64');
+                    console.log(`✅ Captured [${type}] via Exact Card Box Clip! Box:`, clipBox, `Size: ${pageBuffer.length} bytes`);
+                } else {
+                    console.log(`⚠️ Card element for [${type}] not found in DOM, generating fallback image...`);
+                    const target = SECTION_TARGETS[type] || { title: type, description: 'ไม่พบข้อมูลฟีเจอร์นี้' };
+                    pageBuffer = await generateUnavailableImage(target.title, target.description);
+                }
+            } else {
+                // Retrieve document height to expand the viewport temporarily and prevent visual flickering from fullPage: true
+                const originalViewportSize = await page.evaluate(() => {
+                    return {
+                        width: window.innerWidth,
+                        height: window.innerHeight,
+                        documentHeight: Math.max(
+                            document.body.scrollHeight,
+                            document.documentElement.scrollHeight,
+                            document.body.offsetHeight,
+                            document.documentElement.offsetHeight,
+                            window.innerHeight
+                        )
+                    };
                 });
-            }
 
-            console.log('Capturing page screenshot (flicker-free)...');
-            const fullScreenshotBase64 = await page.screenshot({
-                encoding: 'base64',
-                type: 'png'
-            });
+                if (type !== 'domains') {
+                    console.log(`Temporarily resizing viewport height from ${originalViewportSize.height} to ${originalViewportSize.documentHeight} for full page capture...`);
+                    await page.setViewport({
+                        width: originalViewportSize.width,
+                        height: originalViewportSize.documentHeight
+                    });
+                }
 
-            if (type !== 'domains') {
-                // Restore viewport size to original window dimensions
-                await page.setViewport({
-                    width: originalViewportSize.width,
-                    height: originalViewportSize.height
+                console.log('Capturing page screenshot (flicker-free)...');
+                const fullScreenshotBase64 = await page.screenshot({
+                    encoding: 'base64',
+                    type: 'png'
                 });
-            }
 
-            let pageBuffer = Buffer.from(fullScreenshotBase64, 'base64');
+                if (type !== 'domains') {
+                    // Restore viewport size to original window dimensions
+                    await page.setViewport({
+                        width: originalViewportSize.width,
+                        height: originalViewportSize.height
+                    });
+                }
 
-            // Apply sharp crop
-            if (cropCoords) {
-                try {
-                    console.log('Programmatically cropping image using sharp:', cropCoords);
-                    const image = sharp(pageBuffer);
-                    const metadata = await image.metadata();
+                pageBuffer = Buffer.from(fullScreenshotBase64, 'base64');
 
-                    // Align coordinates with devicePixelRatio (since Retina displays scale pixels 2x)
-                    const pagesDevicePixelRatio = await page.evaluate(() => window.devicePixelRatio || 1);
+                // Apply sharp crop
+                if (cropCoords) {
+                    try {
+                        console.log('Programmatically cropping image using sharp:', cropCoords);
+                        const image = sharp(pageBuffer);
+                        const metadata = await image.metadata();
 
-                    const scaleX = Math.round(cropCoords.x * pagesDevicePixelRatio);
-                    const scaleY = Math.round(cropCoords.y * pagesDevicePixelRatio);
-                    const scaleWidth = Math.round(cropCoords.width * pagesDevicePixelRatio);
-                    const scaleHeight = Math.round(cropCoords.height * pagesDevicePixelRatio);
+                        // Align coordinates with devicePixelRatio (since Retina displays scale pixels 2x)
+                        const pagesDevicePixelRatio = await page.evaluate(() => window.devicePixelRatio || 1);
 
-                    // Safe boundaries
-                    const extractLeft = Math.max(0, Math.min(scaleX, metadata.width - 1));
-                    const extractTop = Math.max(0, Math.min(scaleY, metadata.height - 1));
-                    const extractWidth = Math.max(10, Math.min(scaleWidth, metadata.width - extractLeft));
-                    const extractHeight = Math.max(10, Math.min(scaleHeight, metadata.height - extractTop));
+                        const scaleX = Math.round(cropCoords.x * pagesDevicePixelRatio);
+                        const scaleY = Math.round(cropCoords.y * pagesDevicePixelRatio);
+                        const scaleWidth = Math.round(cropCoords.width * pagesDevicePixelRatio);
+                        const scaleHeight = Math.round(cropCoords.height * pagesDevicePixelRatio);
 
-                    if (type === 'traffic') {
-                        // 1. Crop sub1 (Requests tab using extractHeight)
-                        console.log('Cropping sub1...');
-                        sub1Buffer = await sharp(pageBuffer)
+                        // Safe boundaries
+                        const extractLeft = Math.max(0, Math.min(scaleX, metadata.width - 1));
+                        const extractTop = Math.max(0, Math.min(scaleY, metadata.height - 1));
+                        const extractWidth = Math.max(10, Math.min(scaleWidth, metadata.width - extractLeft));
+                        const extractHeight = Math.max(10, Math.min(scaleHeight, metadata.height - extractTop));
+
+                        if (type === 'traffic') {
+                            // 1. Crop sub1 (Requests tab using extractHeight)
+                            console.log('Cropping sub1...');
+                            sub1Buffer = await sharp(pageBuffer)
+                                .extract({
+                                    left: extractLeft,
+                                    top: extractTop,
+                                    width: extractWidth,
+                                    height: extractHeight
+                                })
+                                .toBuffer();
+
+                            // 2. Click subsequent tabs and capture
+                            const additionalTabs = [
+                                { text: 'data transfer', key: 'sub2' },
+                                { text: 'page views', key: 'sub3' },
+                                { text: 'visits', key: 'sub4' },
+                                { text: 'api requests', key: 'sub5' }
+                            ];
+
+                            const tabBuffers = {};
+
+                            for (const tabInfo of additionalTabs) {
+                                console.log(`Searching for "${tabInfo.text}" tab to click...`);
+                                try {
+                                    const tabClicked = await page.evaluate((tabText) => {
+                                        const anchors = Array.from(document.querySelectorAll('nav a, button, [role="tab"], a'));
+                                        const target = anchors.find(a => {
+                                            const text = (a.textContent || '').trim().toLowerCase();
+                                            return text.includes(tabText);
+                                        });
+                                        if (target) {
+                                            target.click();
+                                            return true;
+                                        }
+                                        return false;
+                                    }, tabInfo.text);
+
+                                    if (tabClicked) {
+                                        console.log(`Waiting 5 seconds for ${tabInfo.text} content...`);
+                                        await new Promise(r => setTimeout(r, 5000));
+
+                                        // Retrieve document height to expand the viewport temporarily
+                                        const tempDocHeight = await page.evaluate(() => {
+                                            return Math.max(
+                                                document.body.scrollHeight,
+                                                document.documentElement.scrollHeight,
+                                                document.body.offsetHeight,
+                                                document.documentElement.offsetHeight,
+                                                window.innerHeight
+                                            );
+                                        });
+
+                                        await page.setViewport({
+                                            width: originalViewportSize.width,
+                                            height: tempDocHeight
+                                        });
+
+                                        console.log(`Capturing ${tabInfo.text} page screenshot...`);
+                                        const subScreenshotBase64 = await page.screenshot({
+                                            encoding: 'base64',
+                                            type: 'png'
+                                        });
+
+                                        await page.setViewport({
+                                            width: originalViewportSize.width,
+                                            height: originalViewportSize.height
+                                        });
+
+                                        const subFullBuffer = Buffer.from(subScreenshotBase64, 'base64');
+                                        const subImage = sharp(subFullBuffer);
+                                        const subMetadata = await subImage.metadata();
+
+                                        const extractHeightSub = Math.max(10, Math.min(extractHeight, subMetadata.height - extractTop));
+
+                                        const croppedBuf = await subImage
+                                            .extract({
+                                                left: extractLeft,
+                                                top: extractTop,
+                                                width: extractWidth,
+                                                height: extractHeightSub
+                                            })
+                                            .toBuffer();
+                                        
+                                        tabBuffers[tabInfo.key] = croppedBuf;
+                                        console.log(`${tabInfo.text} cropping completed successfully.`);
+                                    } else {
+                                        console.warn(`Could not find or click the "${tabInfo.text}" tab.`);
+                                    }
+                                } catch (tabErr) {
+                                    console.error(`Failed to process tab "${tabInfo.text}":`, tabErr);
+                                }
+                            }
+
+                            sub2Buffer = tabBuffers.sub2 || null;
+                            sub3Buffer = tabBuffers.sub3 || null;
+                            sub4Buffer = tabBuffers.sub4 || null;
+                            sub5Buffer = tabBuffers.sub5 || null;
+                        }
+
+                        // Proceed with standard crop for the main image
+                        pageBuffer = await image
                             .extract({
                                 left: extractLeft,
                                 top: extractTop,
@@ -910,107 +1096,10 @@ export async function GET(request) {
                                 height: extractHeight
                             })
                             .toBuffer();
-
-                        // 2. Click subsequent tabs and capture
-                        const additionalTabs = [
-                            { text: 'data transfer', key: 'sub2' },
-                            { text: 'page views', key: 'sub3' },
-                            { text: 'visits', key: 'sub4' },
-                            { text: 'api requests', key: 'sub5' }
-                        ];
-
-                        const tabBuffers = {};
-
-                        for (const tabInfo of additionalTabs) {
-                            console.log(`Searching for "${tabInfo.text}" tab to click...`);
-                            try {
-                                const tabClicked = await page.evaluate((tabText) => {
-                                    const anchors = Array.from(document.querySelectorAll('nav a, button, [role="tab"], a'));
-                                    const target = anchors.find(a => {
-                                        const text = (a.textContent || '').trim().toLowerCase();
-                                        return text.includes(tabText);
-                                    });
-                                    if (target) {
-                                        target.click();
-                                        return true;
-                                    }
-                                    return false;
-                                }, tabInfo.text);
-
-                                if (tabClicked) {
-                                    console.log(`Waiting 5 seconds for ${tabInfo.text} content...`);
-                                    await new Promise(r => setTimeout(r, 5000));
-
-                                    // Retrieve document height to expand the viewport temporarily
-                                    const tempDocHeight = await page.evaluate(() => {
-                                        return Math.max(
-                                            document.body.scrollHeight,
-                                            document.documentElement.scrollHeight,
-                                            document.body.offsetHeight,
-                                            document.documentElement.offsetHeight,
-                                            window.innerHeight
-                                        );
-                                    });
-
-                                    await page.setViewport({
-                                        width: originalViewportSize.width,
-                                        height: tempDocHeight
-                                    });
-
-                                    console.log(`Capturing ${tabInfo.text} page screenshot...`);
-                                    const subScreenshotBase64 = await page.screenshot({
-                                        encoding: 'base64',
-                                        type: 'png'
-                                    });
-
-                                    await page.setViewport({
-                                        width: originalViewportSize.width,
-                                        height: originalViewportSize.height
-                                    });
-
-                                    const subFullBuffer = Buffer.from(subScreenshotBase64, 'base64');
-                                    const subImage = sharp(subFullBuffer);
-                                    const subMetadata = await subImage.metadata();
-
-                                    const extractHeightSub = Math.max(10, Math.min(extractHeight, subMetadata.height - extractTop));
-
-                                    const croppedBuf = await subImage
-                                        .extract({
-                                            left: extractLeft,
-                                            top: extractTop,
-                                            width: extractWidth,
-                                            height: extractHeightSub
-                                        })
-                                        .toBuffer();
-                                    
-                                    tabBuffers[tabInfo.key] = croppedBuf;
-                                    console.log(`${tabInfo.text} cropping completed successfully.`);
-                                } else {
-                                    console.warn(`Could not find or click the "${tabInfo.text}" tab.`);
-                                }
-                            } catch (tabErr) {
-                                console.error(`Failed to process tab "${tabInfo.text}":`, tabErr);
-                            }
-                        }
-
-                        sub2Buffer = tabBuffers.sub2 || null;
-                        sub3Buffer = tabBuffers.sub3 || null;
-                        sub4Buffer = tabBuffers.sub4 || null;
-                        sub5Buffer = tabBuffers.sub5 || null;
+                        console.log('Main cropping completed successfully.');
+                    } catch (err) {
+                        console.error('Failed to crop screenshot with sharp:', err);
                     }
-
-                    // Proceed with standard crop for the main image
-                    pageBuffer = await image
-                        .extract({
-                            left: extractLeft,
-                            top: extractTop,
-                            width: extractWidth,
-                            height: extractHeight
-                        })
-                        .toBuffer();
-                    console.log('Main cropping completed successfully.');
-                } catch (err) {
-                    console.error('Failed to crop screenshot with sharp:', err);
                 }
             }
 
