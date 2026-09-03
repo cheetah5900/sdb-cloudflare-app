@@ -65,6 +65,10 @@ const SECTION_TARGETS = {
 };
 
 async function generateUnavailableImage(title, subtitle = 'ไม่พบข้อมูลหรือฟีเจอร์นี้ใน Cloudflare Zone / Account ปัจจุบัน') {
+    // Strip emojis for pure font rendering compatibility
+    const cleanTitle = title.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+    const cleanSubtitle = subtitle.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+
     const svg = `
     <svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -76,6 +80,10 @@ async function generateUnavailableImage(title, subtitle = 'ไม่พบข้
             <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stop-color="#1e293b" />
                 <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <linearGradient id="alertGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#f59e0b" />
+                <stop offset="100%" stop-color="#d97706" />
             </linearGradient>
         </defs>
 
@@ -98,20 +106,22 @@ async function generateUnavailableImage(title, subtitle = 'ไม่พบข้
         <circle cx="215" cy="130" r="6" fill="#34d399" />
         <text x="640" y="136" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" text-anchor="middle" fill="#94a3b8">Cloudflare Dashboard &gt; Feature Verification</text>
 
-        <!-- Alert Icon -->
-        <circle cx="640" cy="270" r="54" fill="#334155" fill-opacity="0.6" stroke="#475569" stroke-width="2" />
-        <text x="640" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" text-anchor="middle" fill="#cbd5e1">ℹ️</text>
+        <!-- Vector Shield/Warning Icon -->
+        <circle cx="640" cy="260" r="50" fill="#334155" fill-opacity="0.6" stroke="#475569" stroke-width="2" />
+        <path d="M 640 230 L 670 285 L 610 285 Z" fill="url(#alertGrad)" stroke="#b45309" stroke-width="2" stroke-linejoin="round" />
+        <rect x="638" y="250" width="4" height="18" rx="2" fill="#ffffff" />
+        <circle cx="640" cy="276" r="2.5" fill="#ffffff" />
 
         <!-- Main Title -->
-        <text x="640" y="380" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="bold" text-anchor="middle" fill="#f8fafc">${title}</text>
+        <text x="640" y="370" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="bold" text-anchor="middle" fill="#f8fafc">${cleanTitle}</text>
 
         <!-- Subtitle & Reason -->
-        <text x="640" y="430" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" text-anchor="middle" fill="#94a3b8">${subtitle}</text>
-        <text x="640" y="465" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" text-anchor="middle" fill="#64748b">(ไม่สามารถแคปรูปภาพได้เนื่องจากไม่พบส่วนนี้ในแพ็กเกจหรือ Account ปัจจุบัน)</text>
+        <text x="640" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" text-anchor="middle" fill="#94a3b8">${cleanSubtitle}</text>
+        <text x="640" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" text-anchor="middle" fill="#64748b">(ไม่สามารถแคปรูปภาพได้เนื่องจากไม่พบส่วนนี้ในแพ็กเกจหรือ Account ปัจจุบัน)</text>
 
         <!-- Status Tag Badge -->
-        <rect x="440" y="510" width="400" height="46" rx="23" fill="#e11d48" fill-opacity="0.15" stroke="#f43f5e" stroke-width="1.5" />
-        <text x="640" y="539" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#fda4af">⚠️ Feature Not Found / ไม่พบข้อมูลบนหน้าเว็บ</text>
+        <rect x="420" y="500" width="440" height="46" rx="23" fill="#e11d48" fill-opacity="0.15" stroke="#f43f5e" stroke-width="1.5" />
+        <text x="640" y="529" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#fda4af">[!] Feature Not Found / ไม่พบข้อมูลบนหน้าเว็บ</text>
     </svg>
     `;
     return await sharp(Buffer.from(svg)).png().toBuffer();
