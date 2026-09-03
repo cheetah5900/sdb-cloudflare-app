@@ -224,13 +224,18 @@ export default function ControlPage() {
               <div className="flex flex-col gap-1.5 max-w-md pb-3 border-b border-gray-800/30" onClick={(e) => e.stopPropagation()}>
                   <div className="mt-2 ml-6 grid grid-cols-4 gap-3">
                       <div className="flex flex-col gap-1">
-                          <span className="text-[10px] text-gray-400 font-mono font-medium">Xstart</span>
+                          <span className="text-[10px] text-cyan-400 font-mono font-medium">Xstart (Offset)</span>
                           <input 
-                              type="number"
-                              placeholder="Auto"
+                              type="text"
+                              placeholder="Auto (+0)"
                               value={coords[key]?.xStart || ''}
-                              onChange={(e) => handleCoordChange(key, 'xStart', e.target.value)}
-                              className="bg-gray-950/80 border border-gray-800 rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full"
+                              onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (/^-?\d*$/.test(val)) {
+                                      handleCoordChange(key, 'xStart', val);
+                                  }
+                              }}
+                              className="bg-gray-950/80 border border-cyan-800/40 rounded px-2 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                           />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -1880,13 +1885,20 @@ export default function ControlPage() {
                                                         <>
                                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                                                 <div className="flex flex-col gap-1">
-                                                                    <span className="text-[10px] text-gray-400 font-mono font-medium">Xstart</span>
+                                                                    <span className="text-[10px] text-cyan-400 font-mono font-medium flex items-center gap-1">
+                                                                        Xstart (Offset)
+                                                                    </span>
                                                                     <input
-                                                                        type="number"
-                                                                        placeholder="Auto"
+                                                                        type="text"
+                                                                        placeholder="Auto (+0)"
                                                                         value={coords[activeCaptureTab]?.xStart || ''}
-                                                                        onChange={(e) => handleCoordChange(activeCaptureTab, 'xStart', e.target.value)}
-                                                                        className="bg-gray-950/90 border border-gray-800 rounded px-2.5 py-1 text-xs text-gray-200 focus:outline-none focus:border-rose-500/50 transition-colors w-full font-mono"
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            if (/^-?\d*$/.test(val)) {
+                                                                                handleCoordChange(activeCaptureTab, 'xStart', val);
+                                                                            }
+                                                                        }}
+                                                                        className="bg-gray-950/90 border border-cyan-800/40 rounded px-2.5 py-1 text-xs text-cyan-200 focus:outline-none focus:border-cyan-500/50 transition-colors w-full font-mono"
                                                                     />
                                                                 </div>
                                                                 <div className="flex flex-col gap-1">

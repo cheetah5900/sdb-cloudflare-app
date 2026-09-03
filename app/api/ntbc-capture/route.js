@@ -849,7 +849,7 @@ export async function GET(request) {
                     : ['security level', 'browser integrity check', 'challenge passage'];
 
                 const findCardClip = async () => {
-                    return await page.evaluate((kws) => {
+                    return await page.evaluate((kws, qXS, qXE, qYS, qYE) => {
                         const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span, p'));
                         for (const kw of kws) {
                             const found = allElements.find(el => {
@@ -876,10 +876,24 @@ export async function GET(request) {
 
                                 const cardRect = card ? card.getBoundingClientRect() : headingRect;
                                 
-                                const startX = Math.max(0, Math.min(cardRect.left - 90, headingRect.left - 126));
-                                const startY = Math.max(0, Math.min(cardRect.top + scrollY - 20, headingRect.top + scrollY - 52));
-                                const cardWidth = 935;
-                                const cardHeight = Math.max(350, (cardRect.height > 200 ? cardRect.height : 462) + 8);
+                                const parsedXS = parseInt(qXS, 10);
+                                const parsedXE = parseInt(qXE, 10);
+                                const parsedYS = parseInt(qYS, 10);
+                                const parsedYE = parseInt(qYE, 10);
+
+                                const autoStartX = Math.max(0, Math.min(cardRect.left - 90, headingRect.left - 126));
+                                const autoStartY = Math.max(0, Math.min(cardRect.top + scrollY - 20, headingRect.top + scrollY - 52));
+                                
+                                // Xstart and Ystart as offsets (or legacy direct coords if >500)
+                                const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : autoStartX + (!isNaN(parsedXS) ? parsedXS : 0);
+                                const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : autoStartY + (!isNaN(parsedYS) ? parsedYS : 0);
+                                
+                                const baseWidth = 935;
+                                const baseHeight = Math.max(350, (cardRect.height > 200 ? cardRect.height : 462) + 8);
+
+                                // Xend and Yend as offsets (or legacy direct coords if >500)
+                                const cardWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, baseWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                                const cardHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, baseHeight + (!isNaN(parsedYE) ? parsedYE : 0));
 
                                 return {
                                     x: Math.floor(startX),
@@ -890,7 +904,7 @@ export async function GET(request) {
                             }
                         }
                         return null;
-                    }, keywords);
+                    }, keywords, qXStart, qXEnd, qYStart, qYEnd);
                 };
 
                 let clipBox = await findCardClip();
