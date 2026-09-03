@@ -859,7 +859,22 @@ export async function GET(request) {
                 const isBot = type === 'bot-management';
                 const keywords = isBot 
                     ? ['super bot fight mode', 'bot fight mode', 'bot management'] 
-                    : ['security level', 'browser integrity check', 'challenge passage'];
+                    : ['security level'];
+
+                if (type === 'security-level') {
+                    try {
+                        const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                        if (searchInput) {
+                            console.log('Typing "Security Level" into Cloudflare settings search box...');
+                            await searchInput.click({ clickCount: 3 });
+                            await searchInput.press('Backspace');
+                            await searchInput.type('Security Level', { delay: 20 });
+                            await new Promise(r => setTimeout(r, 600));
+                        }
+                    } catch (err) {
+                        console.warn('Error filtering settings search box:', err.message);
+                    }
+                }
 
                 const findCardClip = async () => {
                     return await page.evaluate((kws, qXS, qXE, qYS, qYE) => {
@@ -868,12 +883,9 @@ export async function GET(request) {
                             const found = allElements.find(el => {
                                 const t = (el.textContent || '').trim().toLowerCase();
                                 const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
-                                return isVisible && t.includes(kw) && (el.children.length === 0 || el.tagName.startsWith('H'));
+                                return isVisible && (t === kw || t.startsWith(kw) || t.includes(kw)) && (el.children.length === 0 || el.tagName.startsWith('H'));
                             });
                             if (found) {
-                                const headingRect = found.getBoundingClientRect();
-                                const scrollY = window.scrollY || window.pageYOffset || 0;
-                                
                                 let card = found.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], section');
                                 if (!card) {
                                     let cur = found;
@@ -887,7 +899,15 @@ export async function GET(request) {
                                     }
                                 }
 
+                                if (card) {
+                                    card.scrollIntoView({ block: 'center', inline: 'center' });
+                                } else {
+                                    found.scrollIntoView({ block: 'center', inline: 'center' });
+                                }
+
+                                const headingRect = found.getBoundingClientRect();
                                 const cardRect = card ? card.getBoundingClientRect() : headingRect;
+                                const scrollY = window.scrollY || window.pageYOffset || 0;
                                 
                                 const parsedXS = parseInt(qXS, 10);
                                 const parsedXE = parseInt(qXE, 10);
@@ -902,7 +922,7 @@ export async function GET(request) {
                                 const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : autoStartY + (!isNaN(parsedYS) ? parsedYS : 0);
                                 
                                 const baseWidth = 935;
-                                const baseHeight = Math.max(350, (cardRect.height > 200 ? cardRect.height : 462) + 8);
+                                const baseHeight = Math.max(250, (cardRect.height > 100 ? cardRect.height : 370) + 8);
 
                                 // Xend and Yend as offsets (or legacy direct coords if >500)
                                 const cardWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, baseWidth + (!isNaN(parsedXE) ? parsedXE : 0));
