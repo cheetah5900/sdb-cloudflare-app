@@ -5,6 +5,9 @@ import sharp from 'sharp';
 
 export const dynamic = 'force-dynamic';
 
+let sessionCachedAccId = null;
+let sessionCachedZoneName = 'log.softdebut.online';
+
 const FILE_MAPPING = {
     dns: 'captured-dns.png',
     traffic: 'captured-traffic.png',
@@ -396,7 +399,96 @@ export async function GET(request) {
             }, { status: 401 });
         }
 
-        // 1. Initial short stabilization delay
+        // 1. Clear any leftover search box filters from previous captures if not targeting settings
+        try {
+            if (type !== 'bot-management' && type !== 'security-level') {
+                const lingeringSearch = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                if (lingeringSearch) {
+                    await lingeringSearch.click({ clickCount: 3 });
+                    await lingeringSearch.press('Backspace');
+                    await new Promise(r => setTimeout(r, 200));
+                }
+            }
+        } catch (clearErr) {
+            console.warn('Could not clear lingering search filter:', clearErr.message);
+        }
+
+        // 2. Intelligent URL Auto-Routing for Target Subpath
+        try {
+            const queryAcc = searchParams.get('account') || searchParams.get('accountId');
+            const queryZone = searchParams.get('zone') || searchParams.get('domain');
+
+            const currentUrl = page.url();
+            const urlMatch = currentUrl.match(/dash\.cloudflare\.com\/([a-zA-Z0-9._-]+)(?:\/([a-zA-Z0-9._-]+))?/i);
+            
+            let accId = queryAcc || (urlMatch ? urlMatch[1] : null) || sessionCachedAccId;
+            if (accId) sessionCachedAccId = accId;
+
+            const nonZoneWords = ['domains', 'profile', 'analytics', 'billing', 'members', 'login', 'sign-in', 'api-tokens'];
+            let zoneName = queryZone;
+            if (!zoneName && urlMatch && urlMatch[2] && !nonZoneWords.includes(urlMatch[2].toLowerCase())) {
+                zoneName = urlMatch[2];
+            }
+            if (!zoneName) {
+                // If currently on domains page, try getting domain from page DOM
+                try {
+                    const domDomain = await page.evaluate(() => {
+                        const rowAnchor = document.querySelector('tr a[href*="/"], [data-testid*="domain"] a, [role="row"] a');
+                        if (rowAnchor) {
+                            const href = rowAnchor.getAttribute('href') || '';
+                            const text = (rowAnchor.textContent || '').trim();
+                            const m = href.match(/\/([a-zA-Z0-9._-]+\.[a-zA-Z]{2,})/);
+                            if (m) return m[1];
+                            if (text.includes('.')) return text;
+                        }
+                        return null;
+                    });
+                    if (domDomain) zoneName = domDomain;
+                } catch (e) {}
+            }
+            if (!zoneName) zoneName = sessionCachedZoneName;
+            if (zoneName) sessionCachedZoneName = zoneName;
+
+            const URL_MAPPING = {
+                'domains': (acc) => `https://dash.cloudflare.com/${acc}/domains/overview`,
+                'dns': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
+                'traffic': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
+                'traffic-countries': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
+                'firewall': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/analytics/events`,
+                'top-events-source': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/analytics/events`,
+                'security-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/custom-rules`,
+                'rate-limiting': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/rate-limiting-rules`,
+                'managed-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/managed-rules`,
+                'ip-access-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
+                'zone-lockdown': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
+                'bot-management': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
+                'security-level': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
+                'ssl-overview': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls`,
+                'ssl-edge': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
+                'argo': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/traffic`,
+                'speed': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`,
+                'speed-mobile': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`
+            };
+
+            const targetFn = URL_MAPPING[type];
+            if (targetFn && accId) {
+                const targetUrl = (type === 'domains') ? targetFn(accId) : (zoneName ? targetFn(accId, zoneName) : null);
+                if (targetUrl) {
+                    const cleanCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
+                    const cleanTarget = targetUrl.split('?')[0].replace(/\/$/, '');
+                    
+                    if (cleanCurrent !== cleanTarget && !cleanCurrent.endsWith(cleanTarget.split('.com/')[1])) {
+                        console.log(`Auto-navigating page from ${currentUrl} to ${targetUrl}...`);
+                        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 12000 });
+                        await new Promise(r => setTimeout(r, 1200));
+                    }
+                }
+            }
+        } catch (navErr) {
+            console.warn('Auto-navigation warning:', navErr.message);
+        }
+
+        // 3. Initial short stabilization delay
         await new Promise(r => setTimeout(r, 600));
 
         // Check if the requested feature/section exists on the Cloudflare page
@@ -422,6 +514,9 @@ export async function GET(request) {
             }
 
             let isFound = await page.evaluate((keywords) => {
+                const is404 = document.title.includes('404') || (document.body && (document.body.innerText.includes("404 | We can't find") || document.body.innerText.includes("We can't find the page")));
+                if (is404) return false;
+
                 const elements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [data-testid], section, [class*="card"], [class*="setting"], div, span, p, label, a, button, tr, td'));
                 for (const kw of keywords) {
                     const match = elements.find(el => {
@@ -750,9 +845,33 @@ export async function GET(request) {
                 };
 
                 // Look for visible headings containing target text
-                const headingText = captureType === 'traffic' ? 'traffic' : (captureType === 'dns' ? 'dns' : (captureType === 'firewall' ? 'security' : (captureType === 'security-rules' ? 'rules' : (captureType === 'argo' ? 'argo' : (captureType === 'speed' || captureType === 'speed-mobile' ? 'speed' : 'domains')))));
-                const heading = findElementByText('h1, h2, h3, h4', headingText) || 
-                                findElementByText('span, div', headingText);
+                const headingKeywordsMap = {
+                    'domains': ['domains', 'domain'],
+                    'dns': ['dns'],
+                    'traffic': ['traffic', 'analytics', 'requests', 'http traffic'],
+                    'traffic-countries': ['traffic', 'analytics', 'country', 'requests'],
+                    'firewall': ['security', 'events', 'firewall'],
+                    'top-events-source': ['security', 'events', 'firewall'],
+                    'security-rules': ['rules', 'custom rules', 'waf'],
+                    'rate-limiting': ['rate limiting', 'rate limits', 'rules'],
+                    'managed-rules': ['managed rules', 'managed', 'waf', 'rules'],
+                    'ip-access-rules': ['ip access', 'tools', 'firewall', 'rules'],
+                    'zone-lockdown': ['zone lockdown', 'tools', 'lockdown', 'rules'],
+                    'bot-management': ['settings', 'bot'],
+                    'security-level': ['settings', 'security'],
+                    'ssl-overview': ['ssl', 'tls', 'encryption mode', 'overview'],
+                    'ssl-edge': ['edge certificates', 'certificates', 'ssl', 'tls'],
+                    'argo': ['argo', 'smart routing', 'routing', 'traffic'],
+                    'speed': ['speed', 'observatory', 'performance'],
+                    'speed-mobile': ['speed', 'observatory', 'performance']
+                };
+                const targetKws = headingKeywordsMap[captureType] || [captureType];
+                let heading = null;
+                for (const kw of targetKws) {
+                    heading = findElementByText('h1, h2, h3, h4', kw) || findElementByText('span, div', kw);
+                    if (heading) break;
+                }
+                if (!heading) heading = document.querySelector('main');
                 // Look for visible pagination footer text containing item counts from the bottom-up
                 const footer = (captureType === 'dns' || captureType === 'firewall' || captureType === 'security-rules')
                     ? (findLastElementByText('div, span, button, p, td', 'records added') || 
