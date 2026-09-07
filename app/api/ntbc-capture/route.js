@@ -403,18 +403,75 @@ export async function GET(request) {
         const targetCheck = SECTION_TARGETS[type];
         if (targetCheck) {
             console.log(`Checking if feature "${targetCheck.title}" is present on Cloudflare page...`);
-            const isFound = await page.evaluate((keywords) => {
-                const elements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [data-testid], section, [class*="card"], [class*="setting"], div, span, p, label, a, button'));
+
+            // If on settings page, search keywords to reveal items that may be virtualized or unrendered
+            if (type === 'bot-management' || type === 'security-level') {
+                try {
+                    const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                    if (searchInput) {
+                        const searchTerm = type === 'bot-management' ? 'Bot' : 'Security Level';
+                        console.log(`Filtering settings search box with "${searchTerm}" for verification...`);
+                        await searchInput.click({ clickCount: 3 });
+                        await searchInput.press('Backspace');
+                        await searchInput.type(searchTerm, { delay: 15 });
+                        await new Promise(r => setTimeout(r, 600));
+                    }
+                } catch (searchErr) {
+                    console.warn('Error applying search filter:', searchErr.message);
+                }
+            }
+
+            let isFound = await page.evaluate((keywords) => {
+                const elements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [data-testid], section, [class*="card"], [class*="setting"], div, span, p, label, a, button, tr, td'));
                 for (const kw of keywords) {
                     const match = elements.find(el => {
                         const txt = (el.textContent || '').toLowerCase().trim();
                         const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
-                        return isVisible && txt.includes(kw);
+                        return isVisible && (txt === kw || txt.startsWith(kw) || txt.includes(kw));
                     });
                     if (match) return true;
                 }
                 return false;
             }, targetCheck.keywords);
+
+            // If not found and it's bot-management, try navigating to alternate URL
+            if (!isFound && type === 'bot-management') {
+                const currentUrl = page.url();
+                let altUrl = null;
+                if (currentUrl.includes('/security/settings')) {
+                    altUrl = currentUrl.replace('/security/settings', '/security/bots');
+                } else if (currentUrl.includes('/security/bots')) {
+                    altUrl = currentUrl.replace('/security/bots', '/security/settings');
+                }
+                if (altUrl) {
+                    console.log(`Bot feature not found on ${currentUrl}. Trying alternate URL: ${altUrl}...`);
+                    try {
+                        await page.goto(altUrl, { waitUntil: 'networkidle2', timeout: 8000 });
+                        await new Promise(r => setTimeout(r, 1000));
+                        const altSearchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                        if (altSearchInput) {
+                            await altSearchInput.click({ clickCount: 3 });
+                            await altSearchInput.press('Backspace');
+                            await altSearchInput.type('Bot', { delay: 15 });
+                            await new Promise(r => setTimeout(r, 600));
+                        }
+                        isFound = await page.evaluate((keywords) => {
+                            const elements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [data-testid], section, [class*="card"], [class*="setting"], div, span, p, label, a, button, tr, td'));
+                            for (const kw of keywords) {
+                                const match = elements.find(el => {
+                                    const txt = (el.textContent || '').toLowerCase().trim();
+                                    const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                                    return isVisible && (txt === kw || txt.startsWith(kw) || txt.includes(kw));
+                                });
+                                if (match) return true;
+                            }
+                            return false;
+                        }, targetCheck.keywords);
+                    } catch (navErr) {
+                        console.warn('Alternate navigation error:', navErr.message);
+                    }
+                }
+            }
 
             if (!isFound) {
                 console.log(`⚠️ Feature "${targetCheck.title}" NOT found on Cloudflare page. Generating professional placeholder image...`);
@@ -858,83 +915,94 @@ export async function GET(request) {
                 console.log(`Targeting [${type}] via Exact Card Box Clip...`);
                 const isBot = type === 'bot-management';
                 const keywords = isBot 
-                    ? ['super bot fight mode', 'bot fight mode', 'bot management'] 
+                    ? ['super bot fight mode', 'bot fight mode', 'bot management', 'bots'] 
                     : ['security level'];
 
-                if (type === 'security-level') {
-                    try {
-                        const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
-                        if (searchInput) {
-                            console.log('Typing "Security Level" into Cloudflare settings search box...');
-                            await searchInput.click({ clickCount: 3 });
-                            await searchInput.press('Backspace');
-                            await searchInput.type('Security Level', { delay: 20 });
-                            await new Promise(r => setTimeout(r, 600));
-                        }
-                    } catch (err) {
-                        console.warn('Error filtering settings search box:', err.message);
+                try {
+                    const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                    if (searchInput) {
+                        const searchTerm = isBot ? 'Bot' : 'Security Level';
+                        console.log(`Typing "${searchTerm}" into Cloudflare settings search box...`);
+                        await searchInput.click({ clickCount: 3 });
+                        await searchInput.press('Backspace');
+                        await searchInput.type(searchTerm, { delay: 20 });
+                        await new Promise(r => setTimeout(r, 600));
                     }
+                } catch (err) {
+                    console.warn('Error filtering settings search box:', err.message);
                 }
 
                 const findCardClip = async () => {
                     return await page.evaluate((kws, qXS, qXE, qYS, qYE) => {
-                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, span, p'));
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], span, mark, a, p, div'));
+                        let found = null;
                         for (const kw of kws) {
-                            const found = allElements.find(el => {
+                            found = allElements.find(el => {
                                 const t = (el.textContent || '').trim().toLowerCase();
                                 const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
-                                return isVisible && (t === kw || t.startsWith(kw) || t.includes(kw)) && (el.children.length === 0 || el.tagName.startsWith('H'));
+                                const isLeaf = (el.children.length === 0 || el.tagName.startsWith('H') || el.tagName === 'SPAN' || el.tagName === 'MARK' || el.tagName === 'A');
+                                return isVisible && isLeaf && (t === kw || t.startsWith(kw) || t.includes(kw));
                             });
-                            if (found) {
-                                let card = found.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], section');
-                                if (!card) {
-                                    let cur = found;
-                                    while (cur && cur !== document.body) {
-                                        const s = window.getComputedStyle(cur);
-                                        if (s.borderWidth !== '0px' && s.borderStyle !== 'none' && cur.offsetWidth > 300) {
-                                            card = cur;
-                                            break;
-                                        }
-                                        cur = cur.parentElement;
+                            if (found) break;
+                        }
+                        if (found) {
+                            let card = found.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], section, tr');
+                            if (!card) {
+                                let cur = found;
+                                while (cur && cur !== document.body) {
+                                    const s = window.getComputedStyle(cur);
+                                    if (s.borderWidth !== '0px' && s.borderStyle !== 'none' && cur.offsetWidth > 300) {
+                                        card = cur;
+                                        break;
                                     }
+                                    cur = cur.parentElement;
                                 }
-
-                                if (card) {
-                                    card.scrollIntoView({ block: 'center', inline: 'center' });
-                                } else {
-                                    found.scrollIntoView({ block: 'center', inline: 'center' });
-                                }
-
-                                const headingRect = found.getBoundingClientRect();
-                                const cardRect = card ? card.getBoundingClientRect() : headingRect;
-                                const scrollY = window.scrollY || window.pageYOffset || 0;
-                                
-                                const parsedXS = parseInt(qXS, 10);
-                                const parsedXE = parseInt(qXE, 10);
-                                const parsedYS = parseInt(qYS, 10);
-                                const parsedYE = parseInt(qYE, 10);
-
-                                const autoStartX = Math.max(0, Math.min(cardRect.left - 90, headingRect.left - 126));
-                                const autoStartY = Math.max(0, Math.min(cardRect.top + scrollY - 20, headingRect.top + scrollY - 52));
-                                
-                                // Xstart and Ystart as offsets (or legacy direct coords if >500)
-                                const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : autoStartX + (!isNaN(parsedXS) ? parsedXS : 0);
-                                const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : autoStartY + (!isNaN(parsedYS) ? parsedYS : 0);
-                                
-                                const baseWidth = 935;
-                                const baseHeight = Math.max(250, (cardRect.height > 100 ? cardRect.height : 370) + 8);
-
-                                // Xend and Yend as offsets (or legacy direct coords if >500)
-                                const cardWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, baseWidth + (!isNaN(parsedXE) ? parsedXE : 0));
-                                const cardHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, baseHeight + (!isNaN(parsedYE) ? parsedYE : 0));
-
-                                return {
-                                    x: Math.floor(startX),
-                                    y: Math.floor(startY),
-                                    width: Math.ceil(cardWidth),
-                                    height: Math.ceil(cardHeight)
-                                };
                             }
+
+                            if (card) {
+                                card.scrollIntoView({ block: 'center', inline: 'center' });
+                            } else {
+                                found.scrollIntoView({ block: 'center', inline: 'center' });
+                            }
+
+                            const headingRect = found.getBoundingClientRect();
+                            const cardRect = card ? card.getBoundingClientRect() : headingRect;
+                            const scrollY = window.scrollY || window.pageYOffset || 0;
+                            
+                            const parsedXS = parseInt(qXS, 10);
+                            const parsedXE = parseInt(qXE, 10);
+                            const parsedYS = parseInt(qYS, 10);
+                            const parsedYE = parseInt(qYE, 10);
+
+                            const isTableRow = card && card.tagName === 'TR';
+
+                            const autoStartX = isTableRow
+                                ? Math.max(0, cardRect.left - 80)
+                                : Math.max(0, Math.min(cardRect.left - 90, headingRect.left - 126));
+
+                            const autoStartY = isTableRow
+                                ? Math.max(0, cardRect.top + scrollY - 12)
+                                : Math.max(0, Math.min(cardRect.top + scrollY - 20, headingRect.top + scrollY - 52));
+                            
+                            // Xstart and Ystart as offsets (or legacy direct coords if >500)
+                            const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : autoStartX + (!isNaN(parsedXS) ? parsedXS : 0);
+                            const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : autoStartY + (!isNaN(parsedYS) ? parsedYS : 0);
+                            
+                            const baseWidth = isTableRow ? Math.min(1450, cardRect.width + 80) : 935;
+                            const baseHeight = isTableRow
+                                ? Math.max(120, cardRect.height + 24)
+                                : Math.max(250, (cardRect.height > 100 ? cardRect.height : 370) + 8);
+
+                            // Xend and Yend as offsets (or legacy direct coords if >500)
+                            const cardWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, baseWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                            const cardHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, baseHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                            return {
+                                x: Math.floor(startX),
+                                y: Math.floor(startY),
+                                width: Math.ceil(cardWidth),
+                                height: Math.ceil(cardHeight)
+                            };
                         }
                         return null;
                     }, keywords, qXStart, qXEnd, qYStart, qYEnd);
@@ -956,6 +1024,13 @@ export async function GET(request) {
                         try {
                             await page.goto(altUrl, { waitUntil: 'networkidle2', timeout: 8000 });
                             await new Promise(r => setTimeout(r, 1000));
+                            const altSearchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
+                            if (altSearchInput) {
+                                await altSearchInput.click({ clickCount: 3 });
+                                await altSearchInput.press('Backspace');
+                                await altSearchInput.type('Bot', { delay: 15 });
+                                await new Promise(r => setTimeout(r, 600));
+                            }
                             clipBox = await findCardClip();
                         } catch (navErr) {
                             console.warn('Could not navigate to alternate bot URL:', navErr.message);
