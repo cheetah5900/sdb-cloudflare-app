@@ -24,10 +24,13 @@ const FILE_MAPPING = {
     'min-tls-version': 'captured-min-tls-version.png',
     'tls-1-3': 'captured-tls-1-3.png',
     'browser-integrity-check': 'captured-browser-integrity.png',
+    'browser-integrity': 'captured-browser-integrity.png',
     'load-balancing-spectrum': 'captured-load-balancing-spectrum.png',
+    'load-balancing': 'captured-load-balancing-spectrum.png',
     'rate-limiting': 'captured-rate-limiting.png',
     'managed-rules': 'captured-managed-rules.png',
     'ip-access-rules': 'captured-ip-access.png',
+    'ip-access': 'captured-ip-access.png',
     'zone-lockdown': 'captured-zone-lockdown.png',
     'traffic-countries': 'captured-traffic-countries.png',
     'top-events-source': 'captured-top-events-source.png'
@@ -88,6 +91,21 @@ const SECTION_TARGETS = {
         title: '🚫 IP Access Rules',
         keywords: ['ip access rules', 'ip access', 'ip firewall'],
         description: 'ไม่พบเมนู IP Access Rules ในโดเมนนี้'
+    },
+    'ip-access': {
+        title: '🚫 IP Access Rules',
+        keywords: ['ip access rules', 'ip access', 'ip firewall'],
+        description: 'ไม่พบเมนู IP Access Rules ในโดเมนนี้'
+    },
+    'browser-integrity': {
+        title: '🛡️ Browser Integrity Check',
+        keywords: ['browser integrity check', 'browser integrity', 'browser check'],
+        description: 'ฟีเจอร์ Browser Integrity Check ปิดการใช้งาน (Disabled) หรือไม่พบในแพ็กเกจนี้'
+    },
+    'load-balancing': {
+        title: '⚖️ Load Balancing and Spectrum records',
+        keywords: ['load balancing', 'spectrum', 'load balancing and spectrum'],
+        description: 'ไม่พบการตั้งค่าหรือบันทึก Load Balancing / Spectrum records ในโดเมนนี้ (Not Configured / Disabled)'
     }
 };
 
@@ -477,6 +495,7 @@ export async function GET(request) {
                 'domains': (acc) => `https://dash.cloudflare.com/${acc}/domains/overview`,
                 'dns': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
                 'load-balancing-spectrum': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
+                'load-balancing': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
                 'traffic': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'traffic-countries': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'firewall': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/analytics/events`,
@@ -485,10 +504,12 @@ export async function GET(request) {
                 'rate-limiting': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/rate-limiting-rules`,
                 'managed-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/managed-rules`,
                 'ip-access-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
+                'ip-access': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
                 'zone-lockdown': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
                 'bot-management': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'security-level': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'browser-integrity-check': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
+                'browser-integrity': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'ssl-overview': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls`,
                 'ssl-edge': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
                 'min-tls-version': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
@@ -894,23 +915,28 @@ export async function GET(request) {
                     });
                 };
 
-                // Look for visible headings containing target text
                 const headingKeywordsMap = {
                     'domains': ['domains', 'domain'],
                     'dns': ['dns'],
                     'traffic': ['traffic', 'analytics', 'requests', 'http traffic'],
-                    'traffic-countries': ['traffic', 'analytics', 'country', 'requests'],
+                    'traffic-countries': ['country', 'countries', 'requests by country', 'traffic', 'analytics'],
                     'firewall': ['security', 'events', 'firewall'],
-                    'top-events-source': ['security', 'events', 'firewall'],
+                    'top-events-source': ['top events by source', 'top events', 'events by service', 'security events', 'activity log', 'security', 'events'],
                     'security-rules': ['rules', 'custom rules', 'waf'],
                     'rate-limiting': ['rate limiting', 'rate limits', 'rules'],
                     'managed-rules': ['managed rules', 'managed', 'waf', 'rules'],
                     'ip-access-rules': ['ip access', 'tools', 'firewall', 'rules'],
+                    'ip-access': ['ip access', 'tools', 'firewall', 'rules'],
                     'zone-lockdown': ['zone lockdown', 'tools', 'lockdown', 'rules'],
                     'bot-management': ['settings', 'bot'],
                     'security-level': ['settings', 'security'],
                     'ssl-overview': ['ssl', 'tls', 'encryption mode', 'overview'],
                     'ssl-edge': ['edge certificates', 'certificates', 'ssl', 'tls'],
+                    'min-tls-version': ['minimum tls version', 'minimum tls', 'edge certificates'],
+                    'tls-1-3': ['tls 1.3', 'edge certificates'],
+                    'browser-integrity-check': ['browser integrity check', 'settings'],
+                    'browser-integrity': ['browser integrity check', 'settings'],
+                    'load-balancing-spectrum': ['load balancing', 'spectrum', 'dns'],
                     'argo': ['argo', 'smart routing', 'routing', 'traffic'],
                     'speed': ['speed', 'observatory', 'performance'],
                     'speed-mobile': ['speed', 'observatory', 'performance']
@@ -1086,7 +1112,7 @@ export async function GET(request) {
 
             let pageBuffer = null;
 
-            const exactCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'load-balancing-spectrum'];
+            const exactCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'browser-integrity', 'load-balancing-spectrum', 'load-balancing'];
             if (exactCardTypes.includes(type)) {
                 console.log(`Targeting [${type}] via Exact Card Box Clip...`);
                 const isBot = type === 'bot-management';
@@ -1095,18 +1121,18 @@ export async function GET(request) {
                     type === 'security-level' ? ['security level'] :
                     type === 'min-tls-version' ? ['minimum tls version', 'minimum tls', 'min tls version'] :
                     type === 'tls-1-3' ? ['tls 1.3', 'tls 1.3 encryption', 'tls 1.3 (with 0-rtt)'] :
-                    type === 'browser-integrity-check' ? ['browser integrity check', 'browser integrity'] :
-                    type === 'load-balancing-spectrum' ? ['load balancing', 'spectrum', 'load balancing and spectrum'] : [];
+                    (type === 'browser-integrity-check' || type === 'browser-integrity') ? ['browser integrity check', 'browser integrity'] :
+                    (type === 'load-balancing-spectrum' || type === 'load-balancing') ? ['load balancing', 'spectrum', 'load balancing and spectrum'] : [];
 
                 try {
                     const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
-                    if (searchInput && type !== 'load-balancing-spectrum') {
+                    if (searchInput && type !== 'load-balancing-spectrum' && type !== 'load-balancing') {
                         const searchTerm = 
                             type === 'bot-management' ? 'Bot' :
                             type === 'security-level' ? 'Security Level' :
                             type === 'min-tls-version' ? 'Minimum TLS' :
                             type === 'tls-1-3' ? 'TLS 1.3' :
-                            type === 'browser-integrity-check' ? 'Browser Integrity' : '';
+                            (type === 'browser-integrity-check' || type === 'browser-integrity') ? 'Browser Integrity' : '';
                         if (searchTerm) {
                             console.log(`Typing "${searchTerm}" into Cloudflare settings search box...`);
                             await searchInput.click({ clickCount: 3 });
