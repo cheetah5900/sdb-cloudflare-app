@@ -1178,6 +1178,34 @@ export async function GET(request) {
                 }
 
                 if (clipBox) {
+                    await page.evaluate(() => {
+                        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                            document.activeElement.blur();
+                        }
+                        const id = 'cf-no-highlight-fix';
+                        let style = document.getElementById(id);
+                        if (!style) {
+                            style = document.createElement('style');
+                            style.id = id;
+                            document.head.appendChild(style);
+                        }
+                        style.innerHTML = `
+                            mark, 
+                            [class*="highlight"], 
+                            [class*="Highlight"], 
+                            [data-sentry-component="Highlight"],
+                            [data-testid*="highlight"],
+                            mark * {
+                                background-color: transparent !important;
+                                background: transparent !important;
+                                color: inherit !important;
+                                box-shadow: none !important;
+                                border: none !important;
+                                padding: 0 !important;
+                                text-decoration: none !important;
+                            }
+                        `;
+                    });
                     await new Promise(r => setTimeout(r, 300));
                     const cardScreenshotBase64 = await page.screenshot({ clip: clipBox, encoding: 'base64', type: 'png' });
                     pageBuffer = Buffer.from(cardScreenshotBase64, 'base64');
@@ -1210,6 +1238,35 @@ export async function GET(request) {
                         height: originalViewportSize.documentHeight
                     });
                 }
+
+                await page.evaluate(() => {
+                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                        document.activeElement.blur();
+                    }
+                    const id = 'cf-no-highlight-fix';
+                    let style = document.getElementById(id);
+                    if (!style) {
+                        style = document.createElement('style');
+                        style.id = id;
+                        document.head.appendChild(style);
+                    }
+                    style.innerHTML = `
+                        mark, 
+                        [class*="highlight"], 
+                        [class*="Highlight"], 
+                        [data-sentry-component="Highlight"],
+                        [data-testid*="highlight"],
+                        mark * {
+                            background-color: transparent !important;
+                            background: transparent !important;
+                            color: inherit !important;
+                            box-shadow: none !important;
+                            border: none !important;
+                            padding: 0 !important;
+                            text-decoration: none !important;
+                        }
+                    `;
+                });
 
                 console.log('Capturing page screenshot (flicker-free)...');
                 const fullScreenshotBase64 = await page.screenshot({
