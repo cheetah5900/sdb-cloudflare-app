@@ -727,25 +727,28 @@ export async function GET(request) {
                     if (captureType === 'domains') {
                         const h = Array.from(document.querySelectorAll('h1, h2, h3, div, span')).find(el => (el.innerText || '').trim().startsWith('Domains') && el.getBoundingClientRect().left > 200);
                         const footer = Array.from(document.querySelectorAll('*')).find(el => (el.innerText || '').trim().startsWith('Showing 1'));
+                        const table = document.querySelector('table, [role="table"]');
+
                         const hRect = h ? h.getBoundingClientRect() : { top: 80, left: 328 };
-                        const fRect = footer ? footer.getBoundingClientRect() : { bottom: 480 };
-                        
-                        let offsetVal = 40;
-                        const parsedYE = parseInt(qYE, 10);
-                        if (!isNaN(parsedYE)) {
-                            offsetVal = 40 + parsedYE; // e.g. +50 or -30 offset from standard 40px padding
-                        }
-                        
+                        const fRect = footer ? footer.getBoundingClientRect() : (table ? table.getBoundingClientRect() : { bottom: 480 });
+
                         const parsedXS = parseInt(qXS, 10);
                         const parsedXE = parseInt(qXE, 10);
                         const parsedYS = parseInt(qYS, 10);
-                        
-                        const x = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(hRect.left) - 30);
-                        const y = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(hRect.top) - 20);
-                        const width = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : 1350;
-                        const height = Math.max(100, Math.round((fRect.bottom || 480) - (hRect.top - 20) + offsetVal));
-                        
-                        return { x, y, width, height };
+                        const parsedYE = parseInt(qYE, 10);
+
+                        const autoStartX = Math.max(0, Math.round(hRect.left) - 30);
+                        const autoStartY = Math.max(0, Math.round(hRect.top) - 20);
+                        const autoWidth = 1350;
+                        const autoHeight = Math.max(200, Math.round((fRect.bottom || 480) - (hRect.top - 20) + 40));
+
+                        // If value > 500, treat as absolute coordinate; otherwise treat as offset (+/- px)
+                        const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                        const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                        const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                        const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                        return { x: startX, y: startY, width: targetWidth, height: targetHeight };
                     }
 
                     if (captureType === 'bot-management') {
