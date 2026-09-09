@@ -52,6 +52,11 @@ const SECTION_TARGETS = {
         keywords: ['minimum tls version', 'minimum tls', 'min tls version'],
         description: 'ไม่พบการตั้งค่า Minimum TLS Version ในหน้านี้'
     },
+    'ssl-edge': {
+        title: '🔒 Minimum TLS Version',
+        keywords: ['minimum tls version', 'minimum tls', 'min tls version'],
+        description: 'ไม่พบการตั้งค่า Minimum TLS Version ในหน้านี้'
+    },
     'tls-1-3': {
         title: '⚡ TLS 1.3',
         keywords: ['tls 1.3', 'tls 1.3 encryption', 'tls 1.3 (with 0-rtt)'],
@@ -546,7 +551,7 @@ export async function GET(request) {
             console.log(`Checking if feature "${targetCheck.title}" is present on Cloudflare page...`);
 
             // If on settings page, search keywords to reveal items that may be virtualized or unrendered
-            const searchableTypes = ['bot-management', 'security-level', 'browser-integrity-check', 'min-tls-version', 'tls-1-3'];
+            const searchableTypes = ['bot-management', 'security-level', 'browser-integrity-check', 'browser-integrity', 'min-tls-version', 'ssl-edge', 'tls-1-3'];
             if (searchableTypes.includes(type)) {
                 try {
                     const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
@@ -554,8 +559,8 @@ export async function GET(request) {
                         const searchTerm = 
                             type === 'bot-management' ? 'Bot' :
                             type === 'security-level' ? 'Security Level' :
-                            type === 'browser-integrity-check' ? 'Browser Integrity' :
-                            type === 'min-tls-version' ? 'Minimum TLS' :
+                            (type === 'browser-integrity-check' || type === 'browser-integrity') ? 'Browser Integrity' :
+                            (type === 'min-tls-version' || type === 'ssl-edge') ? 'Minimum TLS' :
                             type === 'tls-1-3' ? 'TLS 1.3' : '';
                         if (searchTerm) {
                             console.log(`Filtering settings search box with "${searchTerm}" for verification...`);
@@ -1112,14 +1117,14 @@ export async function GET(request) {
 
             let pageBuffer = null;
 
-            const exactCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'browser-integrity', 'load-balancing-spectrum', 'load-balancing'];
+            const exactCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'ssl-edge', 'tls-1-3', 'browser-integrity-check', 'browser-integrity', 'load-balancing-spectrum', 'load-balancing'];
             if (exactCardTypes.includes(type)) {
                 console.log(`Targeting [${type}] via Exact Card Box Clip...`);
                 const isBot = type === 'bot-management';
                 const keywords = 
                     type === 'bot-management' ? ['super bot fight mode', 'bot fight mode', 'bot management', 'bots'] :
                     type === 'security-level' ? ['security level'] :
-                    type === 'min-tls-version' ? ['minimum tls version', 'minimum tls', 'min tls version'] :
+                    (type === 'min-tls-version' || type === 'ssl-edge') ? ['minimum tls version', 'minimum tls', 'min tls version'] :
                     type === 'tls-1-3' ? ['tls 1.3', 'tls 1.3 encryption', 'tls 1.3 (with 0-rtt)'] :
                     (type === 'browser-integrity-check' || type === 'browser-integrity') ? ['browser integrity check', 'browser integrity'] :
                     (type === 'load-balancing-spectrum' || type === 'load-balancing') ? ['load balancing', 'spectrum', 'load balancing and spectrum'] : [];
@@ -1130,7 +1135,7 @@ export async function GET(request) {
                         const searchTerm = 
                             type === 'bot-management' ? 'Bot' :
                             type === 'security-level' ? 'Security Level' :
-                            type === 'min-tls-version' ? 'Minimum TLS' :
+                            (type === 'min-tls-version' || type === 'ssl-edge') ? 'Minimum TLS' :
                             type === 'tls-1-3' ? 'TLS 1.3' :
                             (type === 'browser-integrity-check' || type === 'browser-integrity') ? 'Browser Integrity' : '';
                         if (searchTerm) {
