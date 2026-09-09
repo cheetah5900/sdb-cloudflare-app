@@ -67,6 +67,10 @@ export default function ControlPage() {
      const [capturedSecurityLevelScreenshot, setCapturedSecurityLevelScreenshot] = useState(null);
      const [capturedSslOverviewScreenshot, setCapturedSslOverviewScreenshot] = useState(null);
      const [capturedSslEdgeScreenshot, setCapturedSslEdgeScreenshot] = useState(null);
+     const [capturedMinTlsVersionScreenshot, setCapturedMinTlsVersionScreenshot] = useState(null);
+     const [capturedTls13Screenshot, setCapturedTls13Screenshot] = useState(null);
+     const [capturedBrowserIntegrityScreenshot, setCapturedBrowserIntegrityScreenshot] = useState(null);
+     const [capturedLoadBalancingSpectrumScreenshot, setCapturedLoadBalancingSpectrumScreenshot] = useState(null);
      const [capturedRateLimitingScreenshot, setCapturedRateLimitingScreenshot] = useState(null);
      const [capturedManagedRulesScreenshot, setCapturedManagedRulesScreenshot] = useState(null);
      const [capturedIpAccessScreenshot, setCapturedIpAccessScreenshot] = useState(null);
@@ -76,7 +80,7 @@ export default function ControlPage() {
      const [captureMeta, setCaptureMeta] = useState({});
      const [isCapturingDirect, setIsCapturingDirect] = useState(false);
      const [isCapturingAll, setIsCapturingAll] = useState(false);
-     const [captureAllStatus, setCaptureAllStatus] = useState({ current: 0, total: 17, currentLabel: '' });
+     const [captureAllStatus, setCaptureAllStatus] = useState({ current: 0, total: 21, currentLabel: '' });
      const abortCaptureAllRef = useRef(false);
 
      const [captureDomains, setCaptureDomains] = useState(true);
@@ -103,6 +107,10 @@ export default function ControlPage() {
          securityLevel: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
          sslOverview: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
          sslEdge: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         minTlsVersion: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         tls13: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         browserIntegrity: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+         loadBalancingSpectrum: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
          rateLimiting: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
          managedRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
          ipAccess: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
@@ -1278,10 +1286,14 @@ export default function ControlPage() {
     const ALL_CAPTURE_TABS = [
         { id: 'domains', label: 'Domains', hasData: !!capturedScreenshot, icon: '🌐', type: 'domains', path: '/domains/overview', setter: setCapturedScreenshot, key: 'control_capturedScreenshot', isDynamic: true },
         { id: 'dns', label: 'DNS Records', hasData: !!(capturedDnsScreenshot && (Array.isArray(capturedDnsScreenshot) ? capturedDnsScreenshot.length > 0 : true)), icon: '💾', type: 'dns', path: '/dns/records', setter: setCapturedDnsScreenshot, key: 'control_capturedDnsScreenshot', isDynamic: true },
+        { id: 'loadBalancingSpectrum', label: 'Load Balancing & Spectrum', hasData: !!capturedLoadBalancingSpectrumScreenshot, icon: '⚖️', type: 'load-balancing-spectrum', path: '/dns/records', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
         { id: 'botManagement', label: 'Bot Management', hasData: !!capturedBotManagementScreenshot, icon: '🤖', type: 'bot-management', path: '/security/settings', setter: setCapturedBotManagementScreenshot, key: 'control_capturedBotManagementScreenshot' },
         { id: 'securityLevel', label: 'Security Level', hasData: !!capturedSecurityLevelScreenshot, icon: '🛡️', type: 'security-level', path: '/security/settings', setter: setCapturedSecurityLevelScreenshot, key: 'control_capturedSecurityLevelScreenshot' },
+        { id: 'browserIntegrity', label: 'Browser Integrity', hasData: !!capturedBrowserIntegrityScreenshot, icon: '🛡️', type: 'browser-integrity-check', path: '/security/settings', setter: setCapturedBrowserIntegrityScreenshot, key: 'control_capturedBrowserIntegrityScreenshot' },
         { id: 'sslOverview', label: 'SSL/TLS Mode', hasData: !!capturedSslOverviewScreenshot, icon: '🔒', type: 'ssl-overview', path: '/ssl-tls', setter: setCapturedSslOverviewScreenshot, key: 'control_capturedSslOverviewScreenshot' },
         { id: 'sslEdge', label: 'Edge Certificates', hasData: !!capturedSslEdgeScreenshot, icon: '📜', type: 'ssl-edge', path: '/ssl-tls/edge-certificates', setter: setCapturedSslEdgeScreenshot, key: 'control_capturedSslEdgeScreenshot' },
+        { id: 'minTlsVersion', label: 'Min TLS Version', hasData: !!capturedMinTlsVersionScreenshot, icon: '🔒', type: 'min-tls-version', path: '/ssl-tls/edge-certificates', setter: setCapturedMinTlsVersionScreenshot, key: 'control_capturedMinTlsVersionScreenshot' },
+        { id: 'tls13', label: 'TLS 1.3', hasData: !!capturedTls13Screenshot, icon: '⚡', type: 'tls-1-3', path: '/ssl-tls/edge-certificates', setter: setCapturedTls13Screenshot, key: 'control_capturedTls13Screenshot' },
         { id: 'traffic', label: 'HTTP Traffic', hasData: !!capturedHttpTrafficScreenshot, icon: '📈', type: 'traffic', path: '/analytics/traffic', setter: setCapturedHttpTrafficScreenshot, key: 'control_capturedHttpTrafficScreenshot' },
         { id: 'trafficCountries', label: 'Traffic Countries', hasData: !!capturedTrafficCountriesScreenshot, icon: '🗺️', type: 'traffic-countries', path: '/analytics/traffic', setter: setCapturedTrafficCountriesScreenshot, key: 'control_capturedTrafficCountriesScreenshot' },
         { id: 'firewall', label: 'Firewall', hasData: !!capturedFirewallScreenshot, icon: '🔥', type: 'firewall', path: '/security/analytics/events', setter: setCapturedFirewallScreenshot, key: 'control_capturedFirewallScreenshot' },
@@ -1628,13 +1640,14 @@ export default function ControlPage() {
                             <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
                                 <span className="text-xs font-bold text-gray-300 font-mono">Captured Screenshots ({[
-                                    capturedScreenshot, capturedDnsScreenshot, capturedBotManagementScreenshot,
-                                    capturedSecurityLevelScreenshot, capturedSslOverviewScreenshot, capturedSslEdgeScreenshot,
-                                    capturedHttpTrafficScreenshot, capturedTrafficCountriesScreenshot, capturedFirewallScreenshot,
-                                    capturedTopEventsSourceScreenshot, capturedSecurityRulesScreenshot, capturedRateLimitingScreenshot,
-                                    capturedManagedRulesScreenshot, capturedIpAccessScreenshot, capturedZoneLockdownScreenshot,
-                                    capturedArgoScreenshot, capturedSpeedScreenshot
-                                ].filter(Boolean).length}/17)</span>
+                                    capturedScreenshot, capturedDnsScreenshot, capturedLoadBalancingSpectrumScreenshot,
+                                    capturedBotManagementScreenshot, capturedSecurityLevelScreenshot, capturedBrowserIntegrityScreenshot,
+                                    capturedSslOverviewScreenshot, capturedSslEdgeScreenshot, capturedMinTlsVersionScreenshot,
+                                    capturedTls13Screenshot, capturedHttpTrafficScreenshot, capturedTrafficCountriesScreenshot,
+                                    capturedFirewallScreenshot, capturedTopEventsSourceScreenshot, capturedSecurityRulesScreenshot,
+                                    capturedRateLimitingScreenshot, capturedManagedRulesScreenshot, capturedIpAccessScreenshot,
+                                    capturedZoneLockdownScreenshot, capturedArgoScreenshot, capturedSpeedScreenshot
+                                ].filter(Boolean).length}/21)</span>
                             </div>
 
                             {/* Top-Right Capture All Button & Live Progress */}
@@ -1727,10 +1740,14 @@ export default function ControlPage() {
                                     const tabMap = {
                                         domains: { label: 'Domains Overview', img: capturedScreenshot, type: 'domains', path: '/domains/overview', setter: setCapturedScreenshot, key: 'control_capturedScreenshot' },
                                         dns: { label: 'DNS Records', img: (capturedDnsScreenshot && Array.isArray(capturedDnsScreenshot) && capturedDnsScreenshot.length > 0) ? capturedDnsScreenshot : (capturedDnsScreenshot ? [capturedDnsScreenshot] : null), type: 'dns', path: '/dns/records', setter: setCapturedDnsScreenshot, key: 'control_capturedDnsScreenshot', isArray: true },
+                                        loadBalancingSpectrum: { label: 'Load Balancing & Spectrum (IF Enable)', img: capturedLoadBalancingSpectrumScreenshot, type: 'load-balancing-spectrum', path: '/dns/records', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
                                         botManagement: { label: 'Bot Management', img: capturedBotManagementScreenshot, type: 'bot-management', path: '/security/settings', setter: setCapturedBotManagementScreenshot, key: 'control_capturedBotManagementScreenshot' },
                                         securityLevel: { label: 'Security Level & BIC', img: capturedSecurityLevelScreenshot, type: 'security-level', path: '/security/settings', setter: setCapturedSecurityLevelScreenshot, key: 'control_capturedSecurityLevelScreenshot' },
+                                        browserIntegrity: { label: 'Browser Integrity Check (IF Enable)', img: capturedBrowserIntegrityScreenshot, type: 'browser-integrity-check', path: '/security/settings', setter: setCapturedBrowserIntegrityScreenshot, key: 'control_capturedBrowserIntegrityScreenshot' },
                                         sslOverview: { label: 'SSL/TLS Encryption', img: capturedSslOverviewScreenshot, type: 'ssl-overview', path: '/ssl-tls', setter: setCapturedSslOverviewScreenshot, key: 'control_capturedSslOverviewScreenshot' },
                                         sslEdge: { label: 'Edge Certificates (TLS 1.2/1.3)', img: capturedSslEdgeScreenshot, type: 'ssl-edge', path: '/ssl-tls/edge-certificates', setter: setCapturedSslEdgeScreenshot, key: 'control_capturedSslEdgeScreenshot' },
+                                        minTlsVersion: { label: 'Minimum TLS Version', img: capturedMinTlsVersionScreenshot, type: 'min-tls-version', path: '/ssl-tls/edge-certificates', setter: setCapturedMinTlsVersionScreenshot, key: 'control_capturedMinTlsVersionScreenshot' },
+                                        tls13: { label: 'TLS 1.3 (IF Enable)', img: capturedTls13Screenshot, type: 'tls-1-3', path: '/ssl-tls/edge-certificates', setter: setCapturedTls13Screenshot, key: 'control_capturedTls13Screenshot' },
                                         traffic: { label: 'HTTP Traffic Overview', img: capturedHttpTrafficScreenshot, type: 'traffic', path: '/analytics/traffic', setter: setCapturedHttpTrafficScreenshot, key: 'control_capturedHttpTrafficScreenshot' },
                                         trafficCountries: { label: 'Traffic by Country', img: capturedTrafficCountriesScreenshot, type: 'traffic-countries', path: '/analytics/traffic', setter: setCapturedTrafficCountriesScreenshot, key: 'control_capturedTrafficCountriesScreenshot' },
                                         firewall: { label: 'Firewall Overview', img: capturedFirewallScreenshot, type: 'firewall', path: '/security/analytics/events', setter: setCapturedFirewallScreenshot, key: 'control_capturedFirewallScreenshot' },

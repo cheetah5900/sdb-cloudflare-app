@@ -21,6 +21,10 @@ const FILE_MAPPING = {
     'security-level': 'captured-security-level.png',
     'ssl-overview': 'captured-ssl-overview.png',
     'ssl-edge': 'captured-ssl-edge.png',
+    'min-tls-version': 'captured-min-tls-version.png',
+    'tls-1-3': 'captured-tls-1-3.png',
+    'browser-integrity-check': 'captured-browser-integrity.png',
+    'load-balancing-spectrum': 'captured-load-balancing-spectrum.png',
     'rate-limiting': 'captured-rate-limiting.png',
     'managed-rules': 'captured-managed-rules.png',
     'ip-access-rules': 'captured-ip-access.png',
@@ -39,6 +43,26 @@ const SECTION_TARGETS = {
         title: '🛡️ Security Level & Settings',
         keywords: ['security level', 'browser integrity check', 'challenge passage', 'privacy pass'],
         description: 'ไม่พบเมนู Security Level ในหน้าการตั้งค่าความปลอดภัย'
+    },
+    'min-tls-version': {
+        title: '🔒 Minimum TLS Version',
+        keywords: ['minimum tls version', 'minimum tls', 'min tls version'],
+        description: 'ไม่พบการตั้งค่า Minimum TLS Version ในหน้านี้'
+    },
+    'tls-1-3': {
+        title: '⚡ TLS 1.3',
+        keywords: ['tls 1.3', 'tls 1.3 encryption', 'tls 1.3 (with 0-rtt)'],
+        description: 'ฟีเจอร์ TLS 1.3 ปิดการใช้งาน (Disabled) หรือไม่พบในแพ็กเกจนี้'
+    },
+    'browser-integrity-check': {
+        title: '🛡️ Browser Integrity Check',
+        keywords: ['browser integrity check', 'browser integrity', 'browser check'],
+        description: 'ฟีเจอร์ Browser Integrity Check ปิดการใช้งาน (Disabled) หรือไม่พบในแพ็กเกจนี้'
+    },
+    'load-balancing-spectrum': {
+        title: '⚖️ Load Balancing and Spectrum records',
+        keywords: ['load balancing', 'spectrum', 'load balancing and spectrum'],
+        description: 'ไม่พบการตั้งค่าหรือบันทึก Load Balancing / Spectrum records ในโดเมนนี้ (Not Configured / Disabled)'
     },
     'argo': {
         title: '⚡ Argo Smart Routing',
@@ -452,6 +476,7 @@ export async function GET(request) {
             const URL_MAPPING = {
                 'domains': (acc) => `https://dash.cloudflare.com/${acc}/domains/overview`,
                 'dns': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
+                'load-balancing-spectrum': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
                 'traffic': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'traffic-countries': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'firewall': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/analytics/events`,
@@ -463,8 +488,11 @@ export async function GET(request) {
                 'zone-lockdown': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/tools`,
                 'bot-management': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'security-level': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
+                'browser-integrity-check': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'ssl-overview': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls`,
                 'ssl-edge': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
+                'min-tls-version': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
+                'tls-1-3': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/ssl-tls/edge-certificates`,
                 'argo': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/traffic`,
                 'speed': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`,
                 'speed-mobile': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`
@@ -497,16 +525,24 @@ export async function GET(request) {
             console.log(`Checking if feature "${targetCheck.title}" is present on Cloudflare page...`);
 
             // If on settings page, search keywords to reveal items that may be virtualized or unrendered
-            if (type === 'bot-management' || type === 'security-level') {
+            const searchableTypes = ['bot-management', 'security-level', 'browser-integrity-check', 'min-tls-version', 'tls-1-3'];
+            if (searchableTypes.includes(type)) {
                 try {
                     const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
                     if (searchInput) {
-                        const searchTerm = type === 'bot-management' ? 'Bot' : 'Security Level';
-                        console.log(`Filtering settings search box with "${searchTerm}" for verification...`);
-                        await searchInput.click({ clickCount: 3 });
-                        await searchInput.press('Backspace');
-                        await searchInput.type(searchTerm, { delay: 15 });
-                        await new Promise(r => setTimeout(r, 600));
+                        const searchTerm = 
+                            type === 'bot-management' ? 'Bot' :
+                            type === 'security-level' ? 'Security Level' :
+                            type === 'browser-integrity-check' ? 'Browser Integrity' :
+                            type === 'min-tls-version' ? 'Minimum TLS' :
+                            type === 'tls-1-3' ? 'TLS 1.3' : '';
+                        if (searchTerm) {
+                            console.log(`Filtering settings search box with "${searchTerm}" for verification...`);
+                            await searchInput.click({ clickCount: 3 });
+                            await searchInput.press('Backspace');
+                            await searchInput.type(searchTerm, { delay: 15 });
+                            await new Promise(r => setTimeout(r, 600));
+                        }
                     }
                 } catch (searchErr) {
                     console.warn('Error applying search filter:', searchErr.message);
@@ -705,7 +741,7 @@ export async function GET(request) {
             // Evaluate coordinates for post-capture cropping (no viewport clipping)
             console.log('Calculating bounding box coordinates on active page...');
             let cropCoords = null;
-            const dynamicCardTypes = ['bot-management', 'security-level', 'rate-limiting', 'managed-rules', 'zone-lockdown', 'ip-access-rules', 'ssl-overview', 'ssl-edge', 'domains', 'dns'];
+            const dynamicCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'load-balancing-spectrum', 'rate-limiting', 'managed-rules', 'zone-lockdown', 'ip-access-rules', 'ssl-overview', 'ssl-edge', 'domains', 'dns'];
             if (qXStart && qXEnd && qYStart && qYEnd && !dynamicCardTypes.includes(type)) {
                 const xs = parseInt(qXStart, 10);
                 const xe = parseInt(qXEnd, 10);
@@ -1050,37 +1086,64 @@ export async function GET(request) {
 
             let pageBuffer = null;
 
-            if (type === 'bot-management' || type === 'security-level') {
+            const exactCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'load-balancing-spectrum'];
+            if (exactCardTypes.includes(type)) {
                 console.log(`Targeting [${type}] via Exact Card Box Clip...`);
                 const isBot = type === 'bot-management';
-                const keywords = isBot 
-                    ? ['super bot fight mode', 'bot fight mode', 'bot management', 'bots'] 
-                    : ['security level'];
+                const keywords = 
+                    type === 'bot-management' ? ['super bot fight mode', 'bot fight mode', 'bot management', 'bots'] :
+                    type === 'security-level' ? ['security level'] :
+                    type === 'min-tls-version' ? ['minimum tls version', 'minimum tls', 'min tls version'] :
+                    type === 'tls-1-3' ? ['tls 1.3', 'tls 1.3 encryption', 'tls 1.3 (with 0-rtt)'] :
+                    type === 'browser-integrity-check' ? ['browser integrity check', 'browser integrity'] :
+                    type === 'load-balancing-spectrum' ? ['load balancing', 'spectrum', 'load balancing and spectrum'] : [];
 
                 try {
                     const searchInput = await page.$('input[name="settings-search"], input[placeholder*="Search"]');
-                    if (searchInput) {
-                        const searchTerm = isBot ? 'Bot' : 'Security Level';
-                        console.log(`Typing "${searchTerm}" into Cloudflare settings search box...`);
-                        await searchInput.click({ clickCount: 3 });
-                        await searchInput.press('Backspace');
-                        await searchInput.type(searchTerm, { delay: 20 });
-                        await new Promise(r => setTimeout(r, 600));
+                    if (searchInput && type !== 'load-balancing-spectrum') {
+                        const searchTerm = 
+                            type === 'bot-management' ? 'Bot' :
+                            type === 'security-level' ? 'Security Level' :
+                            type === 'min-tls-version' ? 'Minimum TLS' :
+                            type === 'tls-1-3' ? 'TLS 1.3' :
+                            type === 'browser-integrity-check' ? 'Browser Integrity' : '';
+                        if (searchTerm) {
+                            console.log(`Typing "${searchTerm}" into Cloudflare settings search box...`);
+                            await searchInput.click({ clickCount: 3 });
+                            await searchInput.press('Backspace');
+                            await searchInput.type(searchTerm, { delay: 20 });
+                            await new Promise(r => setTimeout(r, 600));
+                        }
                     }
                 } catch (err) {
                     console.warn('Error filtering settings search box:', err.message);
                 }
 
                 const findCardClip = async () => {
-                    return await page.evaluate((kws, qXS, qXE, qYS, qYE) => {
-                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], span, mark, a, p, div'));
+                    return await page.evaluate((kws, qXS, qXE, qYS, qYE, captureType) => {
+                        const isInsideNav = (el) => {
+                            let p = el;
+                            while (p && p !== document.body) {
+                                const tag = (p.tagName || '').toLowerCase();
+                                const role = p.getAttribute ? p.getAttribute('role') : null;
+                                const cls = typeof p.className === 'string' ? p.className.toLowerCase() : '';
+                                if (tag === 'nav' || tag === 'aside' || tag === 'header' || role === 'navigation' || cls.includes('sidebar') || cls.includes('nav-') || cls.includes('navigation')) {
+                                    return true;
+                                }
+                                p = p.parentElement;
+                            }
+                            return false;
+                        };
+
+                        const allElements = Array.from(document.querySelectorAll('main h1, main h2, main h3, main h4, main h5, main [role="heading"], main [class*="heading"], main [class*="title"], main span, main mark, main a, main p, main div, h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], span, mark, a, p, div'));
                         let found = null;
                         for (const kw of kws) {
                             found = allElements.find(el => {
+                                if (isInsideNav(el)) return false;
                                 const t = (el.textContent || '').trim().toLowerCase();
                                 const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
                                 const isLeaf = (el.children.length === 0 || el.tagName.startsWith('H') || el.tagName === 'SPAN' || el.tagName === 'MARK' || el.tagName === 'A');
-                                return isVisible && isLeaf && (t === kw || t.startsWith(kw) || t.includes(kw));
+                                return isVisible && isLeaf && (t === kw || t.startsWith(kw) || (t.includes(kw) && t.length < 60));
                             });
                             if (found) break;
                         }
@@ -1095,6 +1158,31 @@ export async function GET(request) {
                                         break;
                                     }
                                     cur = cur.parentElement;
+                                }
+                            }
+
+                            // Conditional IF Enable checks
+                            if (captureType === 'tls-1-3' || captureType === 'browser-integrity-check') {
+                                const checkEl = card ? card.querySelector('input[type="checkbox"], [role="switch"], [aria-checked]') : null;
+                                let isChecked = false;
+                                if (checkEl) {
+                                    isChecked = checkEl.checked || checkEl.getAttribute('aria-checked') === 'true' || checkEl.getAttribute('data-state') === 'checked' || checkEl.getAttribute('data-state') === 'on';
+                                } else if (card) {
+                                    const txt = (card.innerText || card.textContent || '').toLowerCase();
+                                    isChecked = txt.includes('on') || txt.includes('enabled') || txt.includes('active');
+                                }
+                                if (checkEl && !isChecked) {
+                                    return { isDisabled: true, reason: `ฟีเจอร์ ${captureType} ปิดการใช้งาน (Disabled / Toggle is Off)` };
+                                }
+                            }
+
+                            if (captureType === 'load-balancing-spectrum') {
+                                if (card) {
+                                    const rows = card.querySelectorAll('tbody tr, [role="row"], [data-testid*="row"]');
+                                    const txt = (card.innerText || card.textContent || '').toLowerCase();
+                                    if (txt.includes('no records') || txt.includes('enable load balancing') || txt.includes('add load balancer') || (!rows.length && (txt.includes('get started') || txt.includes('load balancing')))) {
+                                        return { isDisabled: true, reason: 'ไม่พบการตั้งค่า Load Balancing หรือ Spectrum records ในโดเมนนี้ (Not Configured / Disabled)' };
+                                    }
                                 }
                             }
 
@@ -1144,7 +1232,7 @@ export async function GET(request) {
                             };
                         }
                         return null;
-                    }, keywords, qXStart, qXEnd, qYStart, qYEnd);
+                    }, keywords, qXStart, qXEnd, qYStart, qYEnd, type);
                 };
 
                 let clipBox = await findCardClip();
@@ -1177,7 +1265,26 @@ export async function GET(request) {
                     }
                 }
 
-                if (clipBox) {
+                if (!clipBox && type === 'load-balancing-spectrum') {
+                    const currentUrl = page.url();
+                    if (currentUrl.includes('/dns/records')) {
+                        const altUrl = currentUrl.replace('/dns/records', '/traffic/load-balancing');
+                        console.log(`Load Balancing card not found on DNS page. Trying alternate page: ${altUrl}...`);
+                        try {
+                            await page.goto(altUrl, { waitUntil: 'networkidle2', timeout: 8000 });
+                            await new Promise(r => setTimeout(r, 1000));
+                            clipBox = await findCardClip();
+                        } catch (navErr) {
+                            console.warn('Could not navigate to alternate load-balancing URL:', navErr.message);
+                        }
+                    }
+                }
+
+                if (clipBox && clipBox.isDisabled) {
+                    console.log(`ℹ️ [${type}] is Disabled / Not Active:`, clipBox.reason);
+                    const target = SECTION_TARGETS[type] || { title: type, description: clipBox.reason };
+                    pageBuffer = await generateUnavailableImage(target.title, clipBox.reason || target.description);
+                } else if (clipBox && clipBox.width) {
                     await page.evaluate(() => {
                         if (document.activeElement && typeof document.activeElement.blur === 'function') {
                             document.activeElement.blur();
@@ -1539,6 +1646,10 @@ export async function GET(request) {
             'security-level': 'captured-security-level.png',
             'ssl-overview': 'captured-ssl-overview.png',
             'ssl-edge': 'captured-ssl-edge.png',
+            'min-tls-version': 'captured-min-tls-version.png',
+            'tls-1-3': 'captured-tls-1-3.png',
+            'browser-integrity-check': 'captured-browser-integrity.png',
+            'load-balancing-spectrum': 'captured-load-balancing-spectrum.png',
             'rate-limiting': 'captured-rate-limiting.png',
             'managed-rules': 'captured-managed-rules.png',
             'ip-access-rules': 'captured-ip-access.png',
