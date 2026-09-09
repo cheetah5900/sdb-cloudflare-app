@@ -84,6 +84,26 @@ const VAR_MAP = {
         type: 'top-events-source',
         label: 'Top Events by Source',
         expectedKeywords: ['events', 'source', 'security', 'top', 'action', 'service', 'firewall']
+    },
+    '@captured_browser_integrity': {
+        type: 'browser-integrity-check',
+        label: 'Browser Integrity Check (IF Enable)',
+        expectedKeywords: ['browser integrity check', 'browser integrity', 'evaluate http headers', 'feature verification', 'cloudflare']
+    },
+    '@captured_tls_1_3': {
+        type: 'tls-1-3',
+        label: 'TLS 1.3 (IF Enable)',
+        expectedKeywords: ['tls 1.3', 'tls', 'protocol', 'improved security', 'feature verification', 'encryption']
+    },
+    '@captured_min_tls_version': {
+        type: 'min-tls-version',
+        label: 'Minimum TLS Version',
+        expectedKeywords: ['minimum tls version', 'tls version', 'tls 1.2', 'tls', 'minimum']
+    },
+    '@captured_load_balancing_spectrum': {
+        type: 'load-balancing-spectrum',
+        label: 'Load Balancing & Spectrum (IF Enable)',
+        expectedKeywords: ['load balancing', 'spectrum', 'dns records', 'traffic steering', 'feature verification']
     }
 };
 
