@@ -228,7 +228,11 @@ export async function GET(request) {
                 { id: 'zoneLockdown', file: 'captured-zone-lockdown.png' },
                 { id: 'argo', file: 'captured-argo.png' },
                 { id: 'speed', file: 'captured-speed.png' },
-                { id: 'speedMobile', file: 'captured-speed-mobile.png' }
+                { id: 'speedMobile', file: 'captured-speed-mobile.png' },
+                { id: 'minTlsVersion', file: 'captured-min-tls-version.png' },
+                { id: 'tls13', file: 'captured-tls-1-3.png' },
+                { id: 'browserIntegrity', file: 'captured-browser-integrity-check.png' },
+                { id: 'loadBalancingSpectrum', file: 'captured-load-balancing-spectrum.png' }
             ];
 
             const screenshots = {};

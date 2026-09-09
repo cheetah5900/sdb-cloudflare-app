@@ -21,7 +21,7 @@ import {
     ShieldAlert, Activity, Clock, Globe,
     AlertTriangle, FileText, LayoutDashboard, Database,
     Search, Bell, Menu, Download, Server, Key, List, X, Edit3, Copy, FileType, Settings, Check, Trash2, Calendar, Users, Camera, Image, Terminal, Monitor, Table, Layout,
-    ChevronLeft, ChevronRight, Sparkles, Zap, Award, BarChart2, Shield, Lock, Sliders, Image as ImageIcon, Info, Plus, Tag, CheckCheck, TrendingUp, RefreshCw, ExternalLink
+    ChevronLeft, ChevronRight, Sparkles, Zap, Award, BarChart2, Shield, Lock, Sliders, Image as ImageIcon, Info, Plus, Tag, CheckCheck, TrendingUp, RefreshCw, ExternalLink, Eye
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as htmlToImage from 'html-to-image';
@@ -1249,11 +1249,139 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
         }));
     }, [filteredVariables, selectedCategory, searchTerm]);
 
+    const [previewModalState, setPreviewModalState] = useState({
+        isOpen: false,
+        title: '',
+        varName: '',
+        imgUrl: null
+    });
+
     const insertVariable = (varName) => {
         if (editorRef.current) {
             editorRef.current.insertContent(varName);
             setCopiedVarName(varName);
             setTimeout(() => setCopiedVarName(null), 1500);
+        }
+    };
+
+    const getScreenshotUrlForVariable = (varName) => {
+        if (!varName) return null;
+        const safeData = data || {};
+        switch (varName) {
+            case '@captured_domain_page':
+                return safeData.capturedDomainImage || safeData.captured_domains_page || safeData.captured_domain_page || null;
+            case '@captured_dns_page':
+                return safeData.capturedDnsImage || safeData.captured_dns_page || (safeData.capturedDnsPages && safeData.capturedDnsPages[0]) || null;
+            case '@captured_firewall_page':
+                return safeData.capturedFirewallImage || safeData.captured_firewall_page || null;
+            case '@captured_security_rules_page':
+                return safeData.capturedSecurityRulesImage || safeData.captured_security_rules_page || null;
+            case '@captured_argo_page':
+                return safeData.capturedArgoImage || safeData.captured_argo_page || null;
+            case '@captured_speed_page':
+                return safeData.capturedSpeedImage || safeData.captured_speed_page || null;
+            case '@captured_speed_mobile_page':
+                return safeData.capturedSpeedMobileImage || safeData.captured_speed_mobile_page || null;
+            case '@captured_request_traffic_page':
+                return safeData.capturedTrafficImageSub1 || safeData.captured_request_traffic_page || null;
+            case '@captured_data_transfer_traffic_page':
+                return safeData.capturedTrafficImageSub2 || safeData.captured_data_transfer_traffic_page || null;
+            case '@captured_page_views_traffic_page':
+                return safeData.capturedTrafficImageSub3 || safeData.captured_page_views_traffic_page || null;
+            case '@captured_visits_traffic_page':
+                return safeData.capturedTrafficImageSub4 || safeData.captured_visits_traffic_page || null;
+            case '@captured_api_requests_traffic_page':
+                return safeData.capturedTrafficImageSub5 || safeData.captured_api_requests_traffic_page || null;
+            case '@captured_traffic_page':
+                return safeData.capturedTrafficImage || safeData.captured_traffic_page || null;
+            case '@captured_bot_management':
+                return safeData.capturedBotManagementImage || safeData.captured_bot_management || null;
+            case '@captured_security_level':
+                return safeData.capturedSecurityLevelImage || safeData.captured_security_level || null;
+            case '@captured_ssl_overview':
+                return safeData.capturedSslOverviewImage || safeData.captured_ssl_overview || null;
+            case '@captured_ssl_edge':
+                return safeData.capturedSslEdgeImage || safeData.captured_ssl_edge || safeData.capturedMinTlsVersionImage || safeData.captured_min_tls_version || null;
+            case '@captured_min_tls_version':
+                return safeData.capturedMinTlsVersionImage || safeData.captured_min_tls_version || safeData.capturedSslEdgeImage || safeData.captured_ssl_edge || null;
+            case '@captured_tls_1_3':
+                return safeData.capturedTls13Image || safeData.captured_tls_1_3 || null;
+            case '@captured_browser_integrity':
+                return safeData.capturedBrowserIntegrityImage || safeData.captured_browser_integrity || null;
+            case '@captured_load_balancing_spectrum':
+                return safeData.capturedLoadBalancingSpectrumImage || safeData.captured_load_balancing_spectrum || null;
+            case '@captured_rate_limiting_page':
+                return safeData.capturedRateLimitingImage || safeData.captured_rate_limiting_page || null;
+            case '@captured_managed_rules_page':
+                return safeData.capturedManagedRulesImage || safeData.captured_managed_rules_page || null;
+            case '@captured_ip_access_page':
+                return safeData.capturedIpAccessImage || safeData.captured_ip_access_page || null;
+            case '@captured_zone_lockdown_page':
+                return safeData.capturedZoneLockdownImage || safeData.captured_zone_lockdown_page || null;
+            case '@captured_traffic_countries_page':
+                return safeData.capturedTrafficCountriesImage || safeData.captured_traffic_countries_page || null;
+            case '@captured_top_events_source_page':
+                return safeData.capturedTopEventsSourceImage || safeData.captured_top_events_source_page || null;
+            case '@DASHBOARD_IMAGE@':
+                return dashboardImage || safeData.dashboardImage || null;
+            default:
+                return null;
+        }
+    };
+
+    const handlePreviewScreenshot = async (v) => {
+        let img = getScreenshotUrlForVariable(v.name);
+        if (!img) {
+            try {
+                const res = await fetch('/api/ntbc-capture?action=get-saved');
+                const dataRes = await res.json();
+                if (dataRes && dataRes.success && dataRes.screenshots) {
+                    const s = dataRes.screenshots;
+                    const mapping = {
+                        '@captured_domain_page': s.domains,
+                        '@captured_dns_page': Array.isArray(s.dns) ? s.dns[0] : s.dns,
+                        '@captured_firewall_page': s.firewall,
+                        '@captured_security_rules_page': s.securityRules,
+                        '@captured_argo_page': s.argo,
+                        '@captured_speed_page': s.speed,
+                        '@captured_speed_mobile_page': s.speedMobile,
+                        '@captured_request_traffic_page': s.trafficSub1,
+                        '@captured_data_transfer_traffic_page': s.trafficSub2,
+                        '@captured_page_views_traffic_page': s.trafficSub3,
+                        '@captured_visits_traffic_page': s.trafficSub4,
+                        '@captured_api_requests_traffic_page': s.trafficSub5,
+                        '@captured_traffic_page': s.traffic,
+                        '@captured_bot_management': s.botManagement,
+                        '@captured_security_level': s.securityLevel,
+                        '@captured_ssl_overview': s.sslOverview,
+                        '@captured_ssl_edge': s.sslEdge || s.minTlsVersion,
+                        '@captured_min_tls_version': s.minTlsVersion || s.sslEdge,
+                        '@captured_tls_1_3': s.tls13,
+                        '@captured_browser_integrity': s.browserIntegrity,
+                        '@captured_load_balancing_spectrum': s.loadBalancingSpectrum,
+                        '@captured_rate_limiting_page': s.rateLimiting,
+                        '@captured_managed_rules_page': s.managedRules,
+                        '@captured_ip_access_page': s.ipAccess,
+                        '@captured_zone_lockdown_page': s.zoneLockdown,
+                        '@captured_traffic_countries_page': s.trafficCountries,
+                        '@captured_top_events_source_page': s.topEventsSource
+                    };
+                    img = mapping[v.name] || null;
+                }
+            } catch (e) {
+                console.error('Failed to fetch saved screenshots:', e);
+            }
+        }
+
+        if (img) {
+            setPreviewModalState({
+                isOpen: true,
+                title: v.desc || v.name,
+                varName: v.name,
+                imgUrl: img
+            });
+        } else {
+            Swal.toast('warning', 'ยังไม่มีรูปภาพ', `ยังไม่มีภาพแคปหน้าจอสำหรับ ${v.name} ในระบบ`);
         }
     };
 
@@ -2287,33 +2415,52 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
                                                                             )}
                                                                         </div>
 
-                                                                        {/* Insert Action Button */}
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                insertVariable(v.name);
-                                                                            }}
-                                                                            className={`flex-shrink-0 px-2 py-1 text-xs font-semibold rounded-md border flex items-center gap-1 transition-all ${
-                                                                                isCopied
-                                                                                    ? 'bg-emerald-600 text-white border-emerald-600'
-                                                                                    : isScreenshot
-                                                                                        ? 'bg-orange-50 dark:bg-orange-900/40 text-orange-700 dark:text-orange-200 border-orange-300 dark:border-orange-700 group-hover:bg-orange-600 group-hover:text-white group-hover:border-orange-600'
-                                                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600'
-                                                                            }`}
-                                                                        >
-                                                                            {isCopied ? (
-                                                                                <>
-                                                                                    <CheckCheck className="w-3 h-3 animate-bounce" />
-                                                                                    <span>แทรกแล้ว</span>
-                                                                                </>
-                                                                            ) : (
-                                                                                <>
-                                                                                    <Plus className="w-3 h-3" />
-                                                                                    <span>แทรก</span>
-                                                                                </>
+                                                                        {/* Action Buttons */}
+                                                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                                            {/* Preview Button for Screenshots */}
+                                                                            {isScreenshot && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handlePreviewScreenshot(v);
+                                                                                    }}
+                                                                                    className="px-2 py-1 text-xs font-semibold rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-orange-500 hover:text-white hover:border-orange-500 dark:hover:bg-orange-600 dark:hover:text-white flex items-center gap-1 transition-all shadow-2xs cursor-pointer"
+                                                                                    title={`ดูตัวอย่างภาพแคปหน้าจอของ ${v.name}`}
+                                                                                >
+                                                                                    <Eye className="w-3 h-3" />
+                                                                                    <span>ตัวอย่าง</span>
+                                                                                </button>
                                                                             )}
-                                                                        </button>
+
+                                                                            {/* Insert Action Button */}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    insertVariable(v.name);
+                                                                                }}
+                                                                                className={`px-2 py-1 text-xs font-semibold rounded-md border flex items-center gap-1 transition-all cursor-pointer ${
+                                                                                    isCopied
+                                                                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                                                                        : isScreenshot
+                                                                                            ? 'bg-orange-50 dark:bg-orange-900/40 text-orange-700 dark:text-orange-200 border-orange-300 dark:border-orange-700 group-hover:bg-orange-600 group-hover:text-white group-hover:border-orange-600'
+                                                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600'
+                                                                                }`}
+                                                                            >
+                                                                                {isCopied ? (
+                                                                                    <>
+                                                                                        <CheckCheck className="w-3 h-3 animate-bounce" />
+                                                                                        <span>แทรกแล้ว</span>
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <Plus className="w-3 h-3" />
+                                                                                        <span>แทรก</span>
+                                                                                    </>
+                                                                                )}
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 );
                                                             })}
@@ -2378,7 +2525,79 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
                     )}
                 </div>
             </div>
-            {/* ScreenshotPreviewModal moved to main page to be rendered correctly overlaying everything */}
+            {/* Screenshot Live Preview Modal inside ReportModal */}
+            {previewModalState.isOpen && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-4xl shadow-2xl p-6 relative flex flex-col max-h-[90vh] animate-scale-up">
+                        <div className="flex items-center justify-between pb-4 border-b border-gray-800 mb-4">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400">
+                                    <Camera className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                        <span>{previewModalState.title}</span>
+                                        <code className="text-xs font-mono px-2 py-0.5 rounded bg-gray-800 text-orange-300 border border-gray-700">
+                                            {previewModalState.varName}
+                                        </code>
+                                    </h3>
+                                    <p className="text-xs text-gray-400">
+                                        ภาพแคปหน้าจอล่าสุดที่มีอยู่ในระบบ
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setPreviewModalState({ isOpen: false, title: '', varName: '', imgUrl: null })}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-auto rounded-xl border border-gray-800 bg-gray-950 flex items-center justify-center p-4 min-h-[300px]">
+                            {previewModalState.imgUrl ? (
+                                <img
+                                    src={previewModalState.imgUrl}
+                                    className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-lg border border-gray-800"
+                                    alt={previewModalState.title}
+                                />
+                            ) : (
+                                <div className="text-center py-12">
+                                    <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-2 opacity-60" />
+                                    <span className="text-gray-400 text-sm">ไม่พบรูปภาพในระบบ</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-800">
+                            <div className="text-xs text-gray-400 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                                <span>หากต้องการอัปเดตรูปภาพใหม่ สามารถกดแคปได้จากหน้า Control Panel</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        insertVariable(previewModalState.varName);
+                                        setPreviewModalState({ isOpen: false, title: '', varName: '', imgUrl: null });
+                                    }}
+                                    className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>แทรกลงในเทมเพลต</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewModalState({ isOpen: false, title: '', varName: '', imgUrl: null })}
+                                    className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-lg transition-colors border border-gray-700 cursor-pointer"
+                                >
+                                    ปิด
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };
@@ -3846,6 +4065,10 @@ export default function NTBCCFReportPage() {
     const [capturedZoneLockdownImage, setCapturedZoneLockdownImage] = useState(null);
     const [capturedTrafficCountriesImage, setCapturedTrafficCountriesImage] = useState(null);
     const [capturedTopEventsSourceImage, setCapturedTopEventsSourceImage] = useState(null);
+    const [capturedMinTlsVersionImage, setCapturedMinTlsVersionImage] = useState(null);
+    const [capturedTls13Image, setCapturedTls13Image] = useState(null);
+    const [capturedBrowserIntegrityImage, setCapturedBrowserIntegrityImage] = useState(null);
+    const [capturedLoadBalancingSpectrumImage, setCapturedLoadBalancingSpectrumImage] = useState(null);
 
     // Load saved screenshots directly from server disk
     useEffect(() => {
@@ -3880,6 +4103,10 @@ export default function NTBCCFReportPage() {
                     if (s.zoneLockdown) setCapturedZoneLockdownImage(s.zoneLockdown);
                     if (s.trafficCountries) setCapturedTrafficCountriesImage(s.trafficCountries);
                     if (s.topEventsSource) setCapturedTopEventsSourceImage(s.topEventsSource);
+                    if (s.minTlsVersion) setCapturedMinTlsVersionImage(s.minTlsVersion);
+                    if (s.tls13) setCapturedTls13Image(s.tls13);
+                    if (s.browserIntegrity) setCapturedBrowserIntegrityImage(s.browserIntegrity);
+                    if (s.loadBalancingSpectrum) setCapturedLoadBalancingSpectrumImage(s.loadBalancingSpectrum);
                 }
             })
             .catch(e => {
@@ -6134,7 +6361,21 @@ export default function NTBCCFReportPage() {
                     capturedSecurityRulesImage,
                     capturedArgoImage,
                     capturedSpeedImage,
-                    capturedSpeedMobileImage
+                    capturedSpeedMobileImage,
+                    capturedBotManagementImage,
+                    capturedSecurityLevelImage,
+                    capturedSslOverviewImage,
+                    capturedSslEdgeImage,
+                    capturedRateLimitingImage,
+                    capturedManagedRulesImage,
+                    capturedIpAccessImage,
+                    capturedZoneLockdownImage,
+                    capturedTrafficCountriesImage,
+                    capturedTopEventsSourceImage,
+                    capturedMinTlsVersionImage,
+                    capturedTls13Image,
+                    capturedBrowserIntegrityImage,
+                    capturedLoadBalancingSpectrumImage
                 }}
                 dashboardImage={dashboardImage}
                 template={reportModalMode === 'static-template' ? staticReportTemplate : reportModalMode === 'middle-template' ? middleReportTemplate : reportTemplate}
