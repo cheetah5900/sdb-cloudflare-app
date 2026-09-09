@@ -73,4 +73,6 @@ next-env.d.ts
 /db/captured/*
 /scratch/
 /scripts/tmp_downloads
+/scripts/test-all/tmp_downloads/
 /.ocr_verification_results/
+/.gls_ocr_verification_results/
