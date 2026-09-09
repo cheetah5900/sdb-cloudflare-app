@@ -328,8 +328,11 @@ async function runE2ESuite() {
         // -------------------------------------------------------------
         log('\n📑 MODULE 4: GLS Template Dynamic Variables Verification', colors.blue);
         
-        // Fetch GLS template from static template API
-        const templateRes = await axios.get(`${BASE_URL}/api/ntbc-static-template?id=1788234492865`);
+        // Fetch all templates and locate GLS template dynamically
+        const templatesListRes = await axios.get(`${BASE_URL}/api/ntbc-templates`);
+        const glsMeta = (templatesListRes.data || []).find(t => (t.name || '').toLowerCase().includes('gls')) || { id: '1788234492865' };
+        
+        const templateRes = await axios.get(`${BASE_URL}/api/ntbc-static-template?id=${glsMeta.id}`);
         const templateHtml = templateRes.data.template || '';
         const dynamicVarMatches = templateHtml.match(/@captured_[a-z0-9_]+/g) || [];
         const uniqueVars = Array.from(new Set(dynamicVarMatches));
@@ -337,17 +340,119 @@ async function runE2ESuite() {
         recordResult(
             'GLS Template',
             'ตรวจสอบตัวแปร Dynamic Screenshot ใน Template GLS',
-            'API: /api/ntbc-static-template?id=1788234492865',
+            `API: /api/ntbc-static-template?id=${glsMeta.id}`,
             'มีตัวแปร @captured_bot_management, @captured_security_level ฯลฯ ครบ',
             `พบตัวแปร Dynamic ทั้งหมด ${uniqueVars.length} ตัวแปร (${uniqueVars.slice(0, 4).join(', ')}...)`,
             uniqueVars.length >= 15
         );
 
         // -------------------------------------------------------------
-        // Print Summary Table
+        // MODULE 5: End-to-End Image Capture & Apple Vision OCR Verification
+        // -------------------------------------------------------------
+        log('\n🔍 MODULE 5: Full Screenshot Capture & Apple Vision OCR Text Verification', colors.blue + colors.bold);
+
+        // Close Puppeteer test browser to release any locks before making live Chrome captures
+        if (browser) {
+            await browser.close();
+            browser = null;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+
+        const OCR_TARGETS = [
+            { varTag: '@captured_bot_management', type: 'bot-management', label: 'Bot Management / Fight Mode', keywords: ['bot', 'fight mode', 'detect bots', 'cloudflare'] },
+            { varTag: '@captured_security_level', type: 'security-level', label: 'Security Level & Settings', keywords: ['security level', 'security', 'settings', 'browser integrity'] },
+            { varTag: '@captured_ssl_overview', type: 'ssl-overview', label: 'SSL/TLS Overview', keywords: ['ssl', 'tls', 'encryption mode', 'overview'] },
+            { varTag: '@captured_ssl_edge', type: 'ssl-edge', label: 'Minimum TLS Version (SSL Edge)', keywords: ['minimum tls', 'min tls', 'edge certificates', 'tls'] },
+            { varTag: '@captured_dns_page', type: 'dns', label: 'DNS Management', keywords: ['dns', 'records', 'type', 'name', 'content'] },
+            { varTag: '@captured_security_rules_page', type: 'security-rules', label: 'Security Rules (Custom Rules)', keywords: ['custom rules', 'rules', 'security', 'waf'] },
+            { varTag: '@captured_rate_limiting_page', type: 'rate-limiting', label: 'Rate Limiting Rules', keywords: ['rate limiting', 'rate limits', 'rules'] },
+            { varTag: '@captured_managed_rules_page', type: 'managed-rules', label: 'Managed WAF Rules', keywords: ['managed rules', 'waf', 'cloudflare managed', 'owasp'] },
+            { varTag: '@captured_ip_access_page', type: 'ip-access', label: 'IP Access Rules', keywords: ['ip access', 'access rules', 'ip', 'tools', 'security'] },
+            { varTag: '@captured_zone_lockdown_page', type: 'zone-lockdown', label: 'Zone Lockdown Rules', keywords: ['zone lockdown', 'lockdown', 'rules', 'tools'] },
+            { varTag: '@captured_request_traffic_page', type: 'traffic', subIndex: 1, label: 'HTTP Traffic (Requests Graph)', keywords: ['traffic', 'requests', 'analytics', 'http'] },
+            { varTag: '@captured_data_transfer_traffic_page', type: 'traffic', subIndex: 2, label: 'HTTP Traffic (Data Transfer Graph)', keywords: ['traffic', 'data transfer', 'bandwidth', 'analytics'] },
+            { varTag: '@captured_traffic_countries_page', type: 'traffic-countries', label: 'Traffic by Country', keywords: ['country', 'countries', 'location', 'traffic', 'requests', 'volume'] },
+            { varTag: '@captured_firewall_page', type: 'firewall', label: 'Firewall Overview / Security Events', keywords: ['security', 'events', 'firewall', 'analytics', 'activity', 'waf'] },
+            { varTag: '@captured_top_events_source_page', type: 'top-events-source', label: 'Top Events by Source', keywords: ['events', 'source', 'security', 'top', 'action', 'service'] },
+            { varTag: '@captured_tls_1_3', type: 'tls-1-3', label: 'TLS 1.3 (IF Enable)', keywords: ['tls 1.3', 'tls', 'encryption', 'feature verification'] },
+            { varTag: '@captured_browser_integrity', type: 'browser-integrity-check', label: 'Browser Integrity Check (IF Enable)', keywords: ['browser integrity check', 'browser integrity', 'feature verification'] },
+            { varTag: '@captured_load_balancing_spectrum', type: 'load-balancing-spectrum', label: 'Load Balancing & Spectrum (IF Enable)', keywords: ['load balancing', 'spectrum', 'feature verification', 'records', 'dns'] }
+        ];
+
+        const ocrDir = path.join(TMP_DOWNLOAD_DIR, 'ocr_captures');
+        if (!fs.existsSync(ocrDir)) fs.mkdirSync(ocrDir, { recursive: true });
+
+        const runVisionOCR = (imagePath) => {
+            try {
+                const { execSync } = require('child_process');
+                return execSync(`swift scripts/ocr_runner.swift "${imagePath}"`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }).trim();
+            } catch (e) {
+                return `OCR_ERROR: ${e.message}`;
+            }
+        };
+
+        for (let i = 0; i < OCR_TARGETS.length; i++) {
+            const target = OCR_TARGETS[i];
+            log(`   [${i + 1}/${OCR_TARGETS.length}] Capturing and OCR verifying ${target.label} (${target.type})...`, colors.gray);
+            await new Promise(r => setTimeout(r, 1200));
+
+            try {
+                const capRes = await axios.get(`${BASE_URL}/api/ntbc-capture?type=${target.type}`, { timeout: 45000 });
+                let base64Data = capRes.data.image;
+                if (target.subIndex === 1 && capRes.data.imageSub1) base64Data = capRes.data.imageSub1;
+                if (target.subIndex === 2 && capRes.data.imageSub2) base64Data = capRes.data.imageSub2;
+
+                const hasValidData = !!(capRes.data.success && base64Data);
+                if (!hasValidData) {
+                    recordResult(
+                        `Capture: ${target.label}`,
+                        `แคปภาพ ${target.varTag}`,
+                        `GET /api/ntbc-capture?type=${target.type}`,
+                        'ได้รับภาพ Base64 และตอบกลับ success: true',
+                        `API Error: ${capRes.data.error || 'No image data'}`,
+                        false
+                    );
+                    continue;
+                }
+
+                const imgBuffer = Buffer.from(base64Data.replace(/^data:image\/png;base64,/, ''), 'base64');
+                const imgFile = path.join(ocrDir, `${target.type}${target.subIndex ? `-sub${target.subIndex}` : ''}.png`);
+                fs.writeFileSync(imgFile, imgBuffer);
+
+                const ocrText = runVisionOCR(imgFile);
+                const ocrLower = ocrText.toLowerCase();
+
+                const matchedKw = target.keywords.find(kw => ocrLower.includes(kw.toLowerCase()));
+                const isUnavailableFallback = ocrLower.includes('not found') || ocrLower.includes('ไม่พบข้อมูล') || capRes.data.isUnavailable;
+                const ocrPassed = !!(matchedKw || isUnavailableFallback);
+                const snippet = ocrText.slice(0, 75).replace(/\n/g, ' ');
+
+                recordResult(
+                    `OCR: ${target.label}`,
+                    `สแกนข้อความ OCR ในภาพ ${target.varTag}`,
+                    'swift scripts/ocr_runner.swift',
+                    `พบคำสำคัญ [${target.keywords.slice(0, 3).join(', ')}] หรือการ์ดสถานะ`,
+                    ocrPassed ? `Match: "${matchedKw || 'Fallback Status'}" | Snippet: "${snippet}..."` : `Mismatch. OCR: "${snippet}..."`,
+                    ocrPassed
+                );
+
+            } catch (ocrErr) {
+                recordResult(
+                    `OCR: ${target.label}`,
+                    `แคปและตรวจ OCR ${target.varTag}`,
+                    `GET /api/ntbc-capture?type=${target.type}`,
+                    'ดำเนินการแคปและตรวจ OCR สำเร็จ',
+                    `Error: ${ocrErr.message}`,
+                    false
+                );
+            }
+        }
+
+        // -------------------------------------------------------------
+        // Print Standardized 6-Column Summary Table
         // -------------------------------------------------------------
         log('\n=============================================================', colors.cyan);
-        log('📊 E2E Regression Test Summary Report', colors.cyan + colors.bold);
+        log('📊 E2E Regression Test Summary Report (Standard 6-Column)', colors.cyan + colors.bold);
         log('=============================================================\n', colors.cyan);
         console.table(testResults);
 
