@@ -1170,6 +1170,107 @@ export async function GET(request) {
                             return false;
                         };
 
+                        if (captureType === 'load-balancing-spectrum' || captureType === 'load-balancing') {
+                            const allRows = Array.from(document.querySelectorAll('table tr, [role="row"]'));
+                            const lbSpectrumRows = allRows.filter(r => {
+                                if (isInsideNav(r)) return false;
+                                const txt = (r.innerText || r.textContent || '').trim().toLowerCase();
+                                return (
+                                    txt.startsWith('lb\t') || txt.startsWith('lb ') || txt.includes('\nlb\t') || txt.includes('\nlb ') ||
+                                    txt.startsWith('spectrum\t') || txt.startsWith('spectrum ') || txt.includes('\nspectrum\t') || txt.includes('\nspectrum ') ||
+                                    txt.includes('manage in traffic app') || txt.includes('manage in spectrum app') ||
+                                    txt.includes('load balancer') || txt.includes('spectrum record')
+                                );
+                            });
+
+                            if (lbSpectrumRows.length === 0) {
+                                const hasSection = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], div, span')).some(el => {
+                                    if (isInsideNav(el)) return false;
+                                    const t = (el.textContent || '').trim().toLowerCase();
+                                    return t === 'load balancing and spectrum records' || t === 'load balancing & spectrum' || t === 'load balancing' || t === 'spectrum records';
+                                });
+                                if (!hasSection) {
+                                    return { isDisabled: true, reason: 'ไม่พบการตั้งค่า Load Balancing หรือ Spectrum records ในโดเมนนี้ (Not Configured / Disabled)' };
+                                }
+                            }
+
+                            const potentialHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], div, p, span'));
+                            const headingEl = potentialHeadings.find(el => {
+                                if (isInsideNav(el)) return false;
+                                const t = (el.textContent || '').trim().toLowerCase();
+                                const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                                return isVisible && (t.startsWith('dns management') || t.includes('dns management') || t.startsWith('load balancing and spectrum') || t.startsWith('load balancing'));
+                            });
+
+                            let cardContainer = null;
+                            if (headingEl) {
+                                let cur = headingEl;
+                                while (cur && cur !== document.body) {
+                                    const s = window.getComputedStyle(cur);
+                                    if (s.borderWidth !== '0px' && s.borderStyle !== 'none' && cur.offsetWidth > 600) {
+                                        cardContainer = cur;
+                                        break;
+                                    }
+                                    cur = cur.parentElement;
+                                }
+                                if (!cardContainer) {
+                                    cardContainer = headingEl.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], main section, form') || headingEl.parentElement;
+                                }
+                            }
+
+                            const firstRow = lbSpectrumRows[0];
+                            const lastRow = lbSpectrumRows[lbSpectrumRows.length - 1];
+
+                            if (!cardContainer && firstRow) {
+                                let cur = firstRow;
+                                while (cur && cur !== document.body) {
+                                    const s = window.getComputedStyle(cur);
+                                    if (s.borderWidth !== '0px' && s.borderStyle !== 'none' && cur.offsetWidth > 600) {
+                                        cardContainer = cur;
+                                        break;
+                                    }
+                                    cur = cur.parentElement;
+                                }
+                                if (!cardContainer) {
+                                    cardContainer = firstRow.closest('.setting-card, [class*="setting-card"], [class*="card"], [data-sentry-element="Card"], main section, form') || firstRow.closest('table');
+                                }
+                            }
+
+                            if (cardContainer || firstRow || headingEl) {
+                                const anchor = headingEl || cardContainer || firstRow;
+                                anchor.scrollIntoView({ block: 'center', inline: 'center' });
+
+                                const scrollY = window.scrollY || window.pageYOffset || 0;
+                                const headingRect = headingEl ? headingEl.getBoundingClientRect() : null;
+                                const cardRect = cardContainer ? cardContainer.getBoundingClientRect() : (anchor ? anchor.getBoundingClientRect() : { left: 300, top: 200, width: 1300, height: 400 });
+                                const lastRowRect = lastRow ? lastRow.getBoundingClientRect() : (cardContainer ? cardContainer.getBoundingClientRect() : { bottom: cardRect.bottom });
+
+                                const autoStartX = Math.max(0, Math.min(Math.round(window.innerWidth * 0.18), Math.round(cardRect.left) - 40));
+                                const headingTop = headingRect ? headingRect.top + scrollY : cardRect.top + scrollY;
+                                const autoStartY = Math.max(0, Math.round(headingTop) - 12);
+                                const autoWidth = 1350;
+                                const autoEndY = Math.round(lastRowRect.bottom + scrollY + 12);
+                                const autoHeight = Math.max(250, autoEndY - autoStartY);
+
+                                const parsedXS = parseInt(qXS, 10);
+                                const parsedXE = parseInt(qXE, 10);
+                                const parsedYS = parseInt(qYS, 10);
+                                const parsedYE = parseInt(qYE, 10);
+
+                                const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                                const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                                const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                                const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                                return {
+                                    x: Math.floor(startX),
+                                    y: Math.floor(startY),
+                                    width: Math.ceil(targetWidth),
+                                    height: Math.ceil(targetHeight)
+                                };
+                            }
+                        }
+
                         const allElements = Array.from(document.querySelectorAll('main h1, main h2, main h3, main h4, main h5, main [role="heading"], main [class*="heading"], main [class*="title"], main span, main mark, main a, main p, main div, h1, h2, h3, h4, h5, [role="heading"], [class*="heading"], [class*="title"], span, mark, a, p, div'));
                         let found = null;
                         for (const kw of kws) {

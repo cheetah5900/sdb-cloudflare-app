@@ -8,7 +8,7 @@
   "dns": {
     "xStart": "0",
     "xEnd": "0",
-    "yStart": "0",
+    "yStart": "20",
     "yEnd": "0"
   },
   "traffic": {
