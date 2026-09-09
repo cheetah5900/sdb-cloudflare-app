@@ -711,14 +711,15 @@ export async function GET(request) {
                 const xe = parseInt(qXEnd, 10);
                 const ys = parseInt(qYStart, 10);
                 const ye = parseInt(qYEnd, 10);
-                if (!isNaN(xs) && !isNaN(xe) && !isNaN(ys) && !isNaN(ye)) {
+                // Only treat as legacy absolute coordinates if strictly > 500 px
+                if (!isNaN(xs) && !isNaN(xe) && !isNaN(ys) && !isNaN(ye) && xs > 500 && xe > 500 && xe > xs) {
                     cropCoords = {
                         x: xs,
                         y: ys,
                         width: Math.max(10, xe - xs),
                         height: Math.max(10, ye - ys)
                     };
-                    console.log('Using query custom crop coords:', cropCoords);
+                    console.log('Using query custom legacy absolute crop coords:', cropCoords);
                 }
             }
 
@@ -783,10 +784,15 @@ export async function GET(request) {
                             const parsedYE = parseInt(qYE, 10);
 
                             // Perfectly cover the entire card/box from its top-left border to bottom-right border
-                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 6);
-                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 6);
-                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth - startX, Math.round(cardRect.width) + 12);
-                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.round(cardRect.height) + 12;
+                            const autoStartX = Math.max(0, Math.round(cardRect.left) - 6);
+                            const autoStartY = Math.max(0, Math.round(cardRect.top + scrollY) - 6);
+                            const autoWidth = Math.round(cardRect.width) + 12;
+                            const autoHeight = Math.round(cardRect.height) + 12;
+
+                            const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                            const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                            const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.min(window.innerWidth - startX, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                            const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
 
                             return { x: startX, y: startY, width: targetWidth, height: targetHeight, matchedMode: matchedName };
                         }
@@ -821,10 +827,15 @@ export async function GET(request) {
                             const parsedYS = parseInt(qYS, 10);
                             const parsedYE = parseInt(qYE, 10);
 
-                            const startX = !isNaN(parsedXS) ? parsedXS : Math.max(0, Math.round(cardRect.left) - 6);
-                            const startY = !isNaN(parsedYS) ? parsedYS : Math.max(0, Math.round(cardRect.top + scrollY) - 6);
-                            const targetWidth = (!isNaN(parsedXS) && !isNaN(parsedXE)) ? Math.max(10, parsedXE - parsedXS) : Math.min(window.innerWidth - startX, Math.round(cardRect.width) + 12);
-                            const targetHeight = (!isNaN(parsedYS) && !isNaN(parsedYE)) ? Math.max(10, parsedYE - parsedYS) : Math.round(cardRect.height) + 12;
+                            const autoStartX = Math.max(0, Math.round(cardRect.left) - 6);
+                            const autoStartY = Math.max(0, Math.round(cardRect.top + scrollY) - 6);
+                            const autoWidth = Math.round(cardRect.width) + 12;
+                            const autoHeight = Math.round(cardRect.height) + 12;
+
+                            const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                            const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                            const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.min(window.innerWidth - startX, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                            const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
 
                             return { x: startX, y: startY, width: targetWidth, height: targetHeight };
                         }
@@ -955,10 +966,14 @@ export async function GET(request) {
                     autoStartX = Math.round(window.innerWidth * 0.18) + 50;
                 } else if (captureType === 'dns') {
                     autoStartX = Math.round(window.innerWidth * 0.19);
-                } else if (captureType === 'traffic') {
+                } else if (captureType === 'traffic' || captureType === 'traffic-countries') {
                     autoStartX = Math.round(window.innerWidth * 0.22);
-                } else if (captureType === 'firewall' || captureType === 'security-rules') {
+                } else if (captureType === 'firewall' || captureType === 'top-events-source') {
                     autoStartX = Math.round(window.innerWidth * 0.15);
+                } else if (captureType === 'security-rules' || captureType === 'rate-limiting' || captureType === 'managed-rules' || captureType === 'ip-access-rules' || captureType === 'zone-lockdown') {
+                    autoStartX = Math.round(window.innerWidth * 0.15);
+                } else if (captureType === 'ssl-overview' || captureType === 'ssl-edge') {
+                    autoStartX = Math.round(window.innerWidth * 0.18);
                 } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
                     autoStartX = Math.round(window.innerWidth * 0.25);
                 } else {
@@ -975,12 +990,14 @@ export async function GET(request) {
                     autoEndX = Math.round(window.innerWidth * 0.93);
                 } else if (captureType === 'dns') {
                     autoEndX = Math.round(window.innerWidth * 0.96);
-                } else if (captureType === 'traffic') {
+                } else if (captureType === 'traffic' || captureType === 'traffic-countries') {
                     autoEndX = Math.round(window.innerWidth * 0.92);
-                } else if (captureType === 'firewall') {
+                } else if (captureType === 'firewall' || captureType === 'top-events-source') {
                     autoEndX = Math.round(window.innerWidth * 0.90);
-                } else if (captureType === 'security-rules') {
+                } else if (captureType === 'security-rules' || captureType === 'rate-limiting' || captureType === 'managed-rules' || captureType === 'ip-access-rules' || captureType === 'zone-lockdown') {
                     autoEndX = Math.round(window.innerWidth * 1.00);
+                } else if (captureType === 'ssl-overview' || captureType === 'ssl-edge') {
+                    autoEndX = Math.round(window.innerWidth * 0.92);
                 } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
                     autoEndX = Math.round(window.innerWidth * 0.85);
                 } else {
@@ -989,7 +1006,7 @@ export async function GET(request) {
 
                 const parsedXE = parseInt(qXE, 10);
                 const endX = !isNaN(parsedXE)
-                    ? ((parsedXE > 500) ? parsedXE : autoEndX + parsedXE)
+                    ? ((parsedXE > 500) ? parsedXE : Math.min(window.innerWidth, autoEndX + parsedXE))
                     : autoEndX;
 
                 const headingAnchorY = Math.max(0, Math.round(headingTop - 20));
@@ -999,12 +1016,12 @@ export async function GET(request) {
                     : headingAnchorY;
 
                 let autoHeight;
-                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown'].includes(captureType);
+                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown', 'ssl-overview', 'ssl-edge'].includes(captureType);
                 if (isDynamic) {
                     autoHeight = Math.max(100, (absoluteBottom - startY) + 20);
-                } else if (captureType === 'traffic') {
+                } else if (captureType === 'traffic' || captureType === 'traffic-countries') {
                     autoHeight = 900;
-                } else if (captureType === 'firewall') {
+                } else if (captureType === 'firewall' || captureType === 'top-events-source') {
                     autoHeight = 700;
                 } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
                     autoHeight = 750;
@@ -1025,7 +1042,7 @@ export async function GET(request) {
                 return {
                     x: startX,
                     y: startY,
-                    width: Math.max(10, endX - startX),
+                    width: Math.max(100, endX - startX),
                     height: targetHeight
                 };
             }, type, qXStart, qXEnd, qYStart, qYEnd);
