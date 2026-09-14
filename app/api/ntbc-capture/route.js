@@ -922,7 +922,7 @@ export async function GET(request) {
             // Evaluate coordinates for post-capture cropping (no viewport clipping)
             console.log('Calculating bounding box coordinates on active page...');
             let cropCoords = null;
-            const dynamicCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'load-balancing-spectrum', 'rate-limiting', 'managed-rules', 'zone-lockdown', 'ip-access-rules', 'ssl-overview', 'ssl-edge', 'domains', 'dns'];
+            const dynamicCardTypes = ['bot-management', 'security-level', 'min-tls-version', 'tls-1-3', 'browser-integrity-check', 'load-balancing-spectrum', 'rate-limiting', 'managed-rules', 'zone-lockdown', 'ip-access-rules', 'ssl-overview', 'ssl-edge', 'domains', 'dns', 'top-events-source'];
             if (qXStart && qXEnd && qYStart && qYEnd && !dynamicCardTypes.includes(type)) {
                 const xs = parseInt(qXStart, 10);
                 const xe = parseInt(qXEnd, 10);
@@ -959,6 +959,69 @@ export async function GET(request) {
                         const autoStartY = Math.max(0, Math.round(hRect.top) - 20);
                         const autoWidth = 1350;
                         const autoHeight = Math.max(200, Math.round((fRect.bottom || 480) - (hRect.top - 20) + 40));
+
+                        // If value > 500, treat as absolute coordinate; otherwise treat as offset (+/- px)
+                        const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                        const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                        const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                        const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                        return { x: startX, y: startY, width: targetWidth, height: targetHeight };
+                    }
+
+                    if (captureType === 'top-events-source') {
+                        // Find heading or title for Events by Source / Activity Log / Top Events
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], div, span'));
+                        const headingKws = ['events by source', 'top events by source', 'events by service', 'top events', 'activity log', 'security events'];
+                        let h = null;
+                        for (const kw of headingKws) {
+                            h = allElements.find(el => {
+                                if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
+                                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                                return (t === kw || t.startsWith(kw) || t.includes(kw)) && el.getBoundingClientRect().left > 150;
+                            });
+                            if (h) break;
+                        }
+
+                        // Find table
+                        const tables = Array.from(document.querySelectorAll('table, [role="table"]')).filter(t => t.offsetWidth > 0 && t.offsetHeight > 0);
+                        const table = tables.length > 0 ? tables[tables.length - 1] : document.querySelector('table, [role="table"]');
+
+                        // Find pagination footer containing "n of n", "Showing 1", "1 - 10 of", etc.
+                        const allFooters = Array.from(document.querySelectorAll('div, span, button, p, td, li, footer'));
+                        const footer = allFooters.reverse().find(el => {
+                            if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
+                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                            return (
+                                (t.includes(' of ') && /\d+\s*of\s*\d+/i.test(t)) ||
+                                t.startsWith('showing 1') ||
+                                t.startsWith('showing ') ||
+                                (t.includes(' of ') && (t.includes('1 -') || t.includes('1-') || t.includes('page '))) ||
+                                t.includes('records added') ||
+                                (t.includes('records') && /\d+/.test(t))
+                            );
+                        }) || allFooters.find(el => {
+                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                            return el.offsetWidth > 0 && el.offsetHeight > 0 && t.includes(' of ') && el.getBoundingClientRect().top > (h ? h.getBoundingClientRect().top : 100);
+                        });
+
+                        const scrollY = window.scrollY || window.pageYOffset || 0;
+                        const hRect = h ? h.getBoundingClientRect() : (table ? table.getBoundingClientRect() : { top: 250, left: 300 });
+                        const tRect = table ? table.getBoundingClientRect() : null;
+                        const fRect = footer ? footer.getBoundingClientRect() : (tRect ? { bottom: tRect.bottom } : { bottom: 850 });
+
+                        const parsedXS = parseInt(qXS, 10);
+                        const parsedXE = parseInt(qXE, 10);
+                        const parsedYS = parseInt(qYS, 10);
+                        const parsedYE = parseInt(qYE, 10);
+
+                        const startTop = Math.min(hRect.top, tRect ? (tRect.top - 40) : hRect.top);
+                        const startLeft = tRect ? Math.min(tRect.left, hRect.left) : hRect.left;
+                        const autoStartX = Math.max(0, Math.min(Math.round(window.innerWidth * 0.15), Math.round(startLeft) - 30));
+                        const autoStartY = Math.max(0, Math.round(startTop + scrollY) - 20);
+                        const autoWidth = 1350;
+                        const bottomCoord = (fRect.bottom || 850) + scrollY;
+                        const autoHeight = Math.max(200, Math.round(bottomCoord - autoStartY + 40));
 
                         // If value > 500, treat as absolute coordinate; otherwise treat as offset (+/- px)
                         const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
@@ -1238,12 +1301,12 @@ export async function GET(request) {
                     : headingAnchorY;
 
                 let autoHeight;
-                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown', 'ssl-overview', 'ssl-edge'].includes(captureType);
+                const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown', 'ssl-overview', 'ssl-edge', 'top-events-source'].includes(captureType);
                 if (isDynamic) {
                     autoHeight = Math.max(100, (absoluteBottom - startY) + 20);
                 } else if (captureType === 'traffic' || captureType === 'traffic-countries') {
                     autoHeight = 900;
-                } else if (captureType === 'firewall' || captureType === 'top-events-source') {
+                } else if (captureType === 'firewall') {
                     autoHeight = 700;
                 } else if (captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
                     autoHeight = 750;
