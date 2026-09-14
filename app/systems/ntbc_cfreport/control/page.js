@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { 
     CheckCircle, Play, ArrowLeft, RefreshCw, Terminal, 
     Layers, Settings, ShieldAlert, Cpu, Activity, Clock, Check, Chrome,
-    Camera, Image as ImageIcon, Sparkles
+    Camera, Image as ImageIcon, Sparkles, Download, Upload, Sliders,
+    Plus, Trash2, Edit3, Save, UserCheck, ShieldCheck, FileJson, FolderPlus
 } from 'lucide-react';
 import Swal from '../utils/alert';
 import { Editor } from '@tinymce/tinymce-react';
@@ -43,6 +44,12 @@ export default function ControlPage() {
      const [accounts, setAccounts] = useState([]);
      const [zones, setZones] = useState([]);
      const [subdomains, setSubdomains] = useState([]);
+
+     // Preset & JSON Export/Import States
+     const [presets, setPresets] = useState([]);
+     const [activePresetId, setActivePresetId] = useState('default');
+     const [isLoadingPresets, setIsLoadingPresets] = useState(false);
+     const jsonImportInputRef = useRef(null);
  
      // Environment Selection States
      const [envAccount, setEnvAccount] = useState('');
@@ -119,35 +126,504 @@ export default function ControlPage() {
          topEventsSource: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' }
      });
 
-    const pullFromImageSizeSettings = (e) => {
-        if (e) e.stopPropagation();
+    const DEFAULT_ZERO_COORDS = {
+        domains: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        dns: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        traffic: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        firewall: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        securityRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        argo: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        speed: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        speedMobile: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        botManagement: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        securityLevel: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        sslOverview: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        sslEdge: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        minTlsVersion: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        tls13: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        browserIntegrity: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        loadBalancingSpectrum: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        rateLimiting: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        managedRules: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        ipAccess: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        zoneLockdown: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        trafficCountries: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' },
+        topEventsSource: { xStart: '0', xEnd: '0', yStart: '0', yEnd: '0' }
+    };
+
+    const fetchPresets = useCallback(async () => {
         try {
-            const stored = localStorage.getItem('ntbc:image-size-settings');
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (parsed.coords) {
-                    setCoords(prev => ({
-                        ...prev,
-                        ...parsed.coords
-                    }));
+            setIsLoadingPresets(true);
+            const res = await fetch('/api/ntbc-capture-presets');
+            const data = await res.json();
+            if (data.success && Array.isArray(data.presets)) {
+                setPresets(data.presets);
+            }
+        } catch (e) {
+            console.error('Failed to fetch capture presets:', e);
+        } finally {
+            setIsLoadingPresets(false);
+        }
+    }, []);
+
+    const activePreset = presets.find(p => p.id === activePresetId) || null;
+    const isOwnerOrAdmin = Boolean(
+        currentUser && (
+            currentUser.role === 'admin' || 
+            currentUser.role === 'root' || 
+            (activePreset && (activePreset.createdBy === currentUser.username || (currentUser.id && activePreset.createdById === currentUser.id)))
+        )
+    );
+
+    const handleSelectPreset = (presetId) => {
+        if (presetId === 'default') {
+            setCoords(DEFAULT_ZERO_COORDS);
+            setActivePresetId('default');
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('control_activePresetId', 'default');
+            }
+            Swal.fire({
+                icon: 'info',
+                title: 'คืนค่าพิกัดเริ่มต้น (Auto +0)',
+                text: 'โหลดพิกัดเริ่มต้นเรียบร้อยแล้ว',
+                timer: 1500,
+                showConfirmButton: false,
+                background: '#111827',
+                color: '#fff'
+            });
+            return;
+        }
+
+        const targetPreset = presets.find(p => p.id === presetId);
+        if (targetPreset && targetPreset.coords) {
+            setCoords(targetPreset.coords);
+            setActivePresetId(presetId);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('control_activePresetId', presetId);
+            }
+            Swal.fire({
+                icon: 'success',
+                title: 'โหลด Preset สำเร็จ!',
+                text: `ใช้การตั้งค่าพิกัดจาก Preset: "${targetPreset.name}"`,
+                timer: 1500,
+                showConfirmButton: false,
+                background: '#111827',
+                color: '#fff'
+            });
+        }
+    };
+
+    const handleSaveAsNewPreset = async () => {
+        const { value: presetName } = await Swal.fire({
+            title: '💾 บันทึกเป็น Preset ใหม่',
+            input: 'text',
+            inputLabel: 'ตั้งชื่อ Preset สำหรับพิกัดปัจจุบัน',
+            inputPlaceholder: 'เช่น NTBC Standard 1080p, High DNS Table...',
+            showCancelButton: true,
+            confirmButtonText: 'บันทึก Preset',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#e11d48',
+            background: '#111827',
+            color: '#fff',
+            inputValidator: (val) => {
+                if (!val || !val.trim()) {
+                    return 'กรุณากรอกชื่อ Preset';
+                }
+            }
+        });
+
+        if (!presetName) return;
+
+        try {
+            const user = currentUser || auth.getCurrentUser() || { username: 'root', role: 'admin' };
+            const res = await fetch('/api/ntbc-capture-presets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: presetName.trim(),
+                    coords,
+                    user
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.preset) {
+                await fetchPresets();
+                setActivePresetId(data.preset.id);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('control_activePresetId', data.preset.id);
+                }
+                Swal.fire({
+                    icon: 'success',
+                    title: 'บันทึก Preset สำเร็จ!',
+                    text: `Preset "${data.preset.name}" ถูกสร้างและเปิดใช้งานแล้ว`,
+                    timer: 2000,
+                    showConfirmButton: false,
+                    background: '#111827',
+                    color: '#fff'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to create preset');
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Error', err.message || 'เกิดข้อผิดพลาดในการบันทึก Preset', 'error');
+        }
+    };
+
+    const handleUpdatePreset = async () => {
+        if (!activePreset || activePresetId === 'default') {
+            return handleSaveAsNewPreset();
+        }
+
+        if (!isOwnerOrAdmin) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'ไม่มีสิทธิ์ดำเนินการ',
+                text: `คุณไม่มีสิทธิ์แก้ไข Preset "${activePreset.name}" (เฉพาะผู้สร้าง @${activePreset.createdBy} หรือ Admin เท่านั้นที่มีสิทธิ์ดำเนินการ)`,
+                background: '#111827',
+                color: '#fff'
+            });
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: 'ยืนยันบันทึกทับ Preset?',
+            text: `ต้องการบันทึกพิกัดปัจจุบันทับลงใน Preset "${activePreset.name}" ใช่หรือไม่?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'บันทึกทับ',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#e11d48',
+            background: '#111827',
+            color: '#fff'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const user = currentUser || auth.getCurrentUser();
+            const res = await fetch('/api/ntbc-capture-presets', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: activePreset.id,
+                    coords,
+                    user
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                await fetchPresets();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'อัปเดต Preset สำเร็จ!',
+                    text: `บันทึกพิกัดลงใน Preset "${activePreset.name}" เรียบร้อยแล้ว`,
+                    timer: 1800,
+                    showConfirmButton: false,
+                    background: '#111827',
+                    color: '#fff'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to update preset');
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Error', err.message || 'เกิดข้อผิดพลาดในการอัปเดต Preset', 'error');
+        }
+    };
+
+    const handleRenamePreset = async () => {
+        if (!activePreset || activePresetId === 'default') return;
+
+        if (!isOwnerOrAdmin) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'ไม่มีสิทธิ์ดำเนินการ',
+                text: `คุณไม่มีสิทธิ์เปลี่ยนชื่อ Preset "${activePreset.name}" (เฉพาะผู้สร้าง @${activePreset.createdBy} หรือ Admin เท่านั้นที่มีสิทธิ์ดำเนินการ)`,
+                background: '#111827',
+                color: '#fff'
+            });
+            return;
+        }
+
+        const { value: newName } = await Swal.fire({
+            title: '✏️ เปลี่ยนชื่อ Preset',
+            input: 'text',
+            inputValue: activePreset.name,
+            inputPlaceholder: 'กรอกชื่อ Preset ใหม่...',
+            showCancelButton: true,
+            confirmButtonText: 'บันทึกชื่อใหม่',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#e11d48',
+            background: '#111827',
+            color: '#fff',
+            inputValidator: (val) => {
+                if (!val || !val.trim()) {
+                    return 'กรุณากรอกชื่อ Preset';
+                }
+            }
+        });
+
+        if (!newName || newName.trim() === activePreset.name) return;
+
+        try {
+            const user = currentUser || auth.getCurrentUser();
+            const res = await fetch('/api/ntbc-capture-presets', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: activePreset.id,
+                    name: newName.trim(),
+                    user
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                await fetchPresets();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'เปลี่ยนชื่อสำเร็จ!',
+                    text: `เปลี่ยนชื่อเป็น "${newName.trim()}" เรียบร้อยแล้ว`,
+                    timer: 1500,
+                    showConfirmButton: false,
+                    background: '#111827',
+                    color: '#fff'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to rename preset');
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Error', err.message || 'เกิดข้อผิดพลาดในการเปลี่ยนชื่อ Preset', 'error');
+        }
+    };
+
+    const handleDeletePreset = async () => {
+        if (!activePreset || activePresetId === 'default') return;
+
+        if (!isOwnerOrAdmin) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'ไม่มีสิทธิ์ดำเนินการ',
+                text: `คุณไม่มีสิทธิ์ลบ Preset "${activePreset.name}" (เฉพาะผู้สร้าง @${activePreset.createdBy} หรือ Admin เท่านั้นที่มีสิทธิ์ดำเนินการ)`,
+                background: '#111827',
+                color: '#fff'
+            });
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: 'ยืนยันการลบ Preset?',
+            text: `ต้องการลบ Preset "${activePreset.name}" หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ลบ Preset',
+            cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#e11d48',
+            background: '#111827',
+            color: '#fff'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const user = currentUser || auth.getCurrentUser();
+            const query = new URLSearchParams({
+                id: activePreset.id,
+                username: user?.username || '',
+                role: user?.role || '',
+                userId: user?.id ? String(user.id) : ''
+            });
+            const res = await fetch(`/api/ntbc-capture-presets?${query.toString()}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (data.success) {
+                await fetchPresets();
+                handleSelectPreset('default');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'ลบ Preset สำเร็จ!',
+                    text: `Preset "${activePreset.name}" ถูกลบเรียบร้อยแล้ว`,
+                    timer: 1800,
+                    showConfirmButton: false,
+                    background: '#111827',
+                    color: '#fff'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to delete preset');
+            }
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Error', err.message || 'เกิดข้อผิดพลาดในการลบ Preset', 'error');
+        }
+    };
+
+    const handleExportJson = () => {
+        try {
+            const exportData = {
+                appName: "SDB NTBC Cloudflare Automated Report Generator",
+                version: "1.1",
+                type: "ntbc_capture_preset",
+                presetName: activePreset?.name || "Capture Coordinates Preset",
+                exportedAt: new Date().toISOString(),
+                exportedBy: currentUser?.username || 'root',
+                coords: coords
+            };
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const filenameSafe = (activePreset?.name || 'capture_coords').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_');
+            a.download = `ntbc_coords_${filenameSafe}_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            Swal.fire({
+                icon: 'success',
+                title: 'Export JSON สำเร็จ!',
+                text: `ดาวน์โหลดไฟล์ ${a.download} เรียบร้อยแล้ว`,
+                timer: 1800,
+                showConfirmButton: false,
+                background: '#111827',
+                color: '#fff'
+            });
+        } catch (err) {
+            console.error('Export JSON failed:', err);
+            Swal.fire('Error', 'เกิดข้อผิดพลาดในการ Export JSON', 'error');
+        }
+    };
+
+    const handleImportJson = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (jsonErr) {
+                throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง');
+            }
+
+            const importedCoords = parsed.coords || (parsed.domains ? parsed : null);
+            if (!importedCoords || typeof importedCoords !== 'object') {
+                throw new Error('ไม่พบข้อมูลพิกัด (Coordinates) ที่ถูกต้องในไฟล์ JSON');
+            }
+
+            // Clean imported coordinates to ensure valid object format
+            const sanitizedCoords = { ...coords };
+            Object.keys(importedCoords).forEach(key => {
+                if (typeof importedCoords[key] === 'object' && importedCoords[key] !== null) {
+                    sanitizedCoords[key] = {
+                        xStart: String(importedCoords[key].xStart ?? '0'),
+                        xEnd: String(importedCoords[key].xEnd ?? '0'),
+                        yStart: String(importedCoords[key].yStart ?? '0'),
+                        yEnd: String(importedCoords[key].yEnd ?? '0')
+                    };
+                }
+            });
+
+            const suggestedPresetName = parsed.presetName || file.name.replace(/\.json$/i, '') || 'Imported Preset';
+
+            const result = await Swal.fire({
+                title: '📥 นำเข้าพิกัดจากไฟล์ JSON',
+                html: `
+                    <div style="text-align:left; font-size:13px; color:#cbd5e1;">
+                        <p class="mb-2">พบการตั้งค่าพิกัดในไฟล์: <strong>${file.name}</strong></p>
+                        <p class="mb-2 text-rose-400">เลือกวิธีการนำข้อมูลไปใช้งาน:</p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                showDenyButton: true,
+                confirmButtonText: '⚡ นำมาใช้ทันที (Apply)',
+                denyButtonText: '💾 บันทึกเป็น Preset ใหม่',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#2563eb',
+                denyButtonColor: '#e11d48',
+                background: '#111827',
+                color: '#fff'
+            });
+
+            if (result.isConfirmed) {
+                // Apply directly
+                setCoords(sanitizedCoords);
+                await fetch('/api/ntbc-capture-coords', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sanitizedCoords)
+                });
+                Swal.fire({
+                    icon: 'success',
+                    title: 'นำเข้าสำเร็จ!',
+                    text: 'นำเข้าพิกัดและนำมาใช้งานทันทีเรียบร้อยแล้ว',
+                    timer: 1800,
+                    showConfirmButton: false,
+                    background: '#111827',
+                    color: '#fff'
+                });
+            } else if (result.isDenied) {
+                // Save as new preset
+                const { value: newPresetName } = await Swal.fire({
+                    title: 'ตั้งชื่อ Preset สำหรับไฟล์ที่นำเข้า',
+                    input: 'text',
+                    inputValue: suggestedPresetName,
+                    showCancelButton: true,
+                    confirmButtonText: 'บันทึก Preset',
+                    cancelButtonText: 'ยกเลิก',
+                    confirmButtonColor: '#e11d48',
+                    background: '#111827',
+                    color: '#fff',
+                    inputValidator: (val) => {
+                        if (!val || !val.trim()) return 'กรุณากรอกชื่อ Preset';
+                    }
+                });
+
+                if (!newPresetName) return;
+
+                const user = currentUser || auth.getCurrentUser() || { username: 'root', role: 'admin' };
+                const res = await fetch('/api/ntbc-capture-presets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: newPresetName.trim(),
+                        coords: sanitizedCoords,
+                        user
+                    })
+                });
+                const data = await res.json();
+                if (data.success && data.preset) {
+                    setCoords(sanitizedCoords);
+                    await fetchPresets();
+                    setActivePresetId(data.preset.id);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('control_activePresetId', data.preset.id);
+                    }
                     Swal.fire({
                         icon: 'success',
-                        title: 'ดึงค่าสำเร็จ!',
-                        text: 'คัดลอกพิกัด Crop จาก Image Size Setting เรียบร้อยแล้ว (อย่าลืมกด Save to Database)',
+                        title: 'บันทึก Preset สำเร็จ!',
+                        text: `นำเข้าและสร้าง Preset "${data.preset.name}" เรียบร้อยแล้ว`,
                         timer: 2000,
                         showConfirmButton: false,
                         background: '#111827',
                         color: '#fff'
                     });
-                    return;
+                } else {
+                    throw new Error(data.error || 'Failed to save preset');
                 }
             }
-            Swal.fire('Info', 'ยังไม่มีการบันทึกข้อมูลพิกัดใน Image Size Setting', 'info');
         } catch (err) {
-            console.error('Failed to pull from image size settings:', err);
-            Swal.fire('Error', 'เกิดข้อผิดพลาดในการดึงค่าจาก Image Size Setting', 'error');
+            console.error('Import JSON error:', err);
+            Swal.fire('Error', err.message || 'เกิดข้อผิดพลาดในการนำเข้าไฟล์ JSON', 'error');
+        } finally {
+            if (e.target) e.target.value = '';
         }
     };
+
+
 
     const getCaptureUrl = (typeKey, typeValue) => {
         let url = `/api/ntbc-capture?type=${typeValue}`;
@@ -292,15 +768,7 @@ export default function ControlPage() {
                           />
                       </div>
                   </div>
-                  <div className="ml-6 mt-2 flex items-center justify-between gap-2">
-                      <button 
-                          type="button"
-                          onClick={pullFromImageSizeSettings}
-                          className="px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-[11px] font-semibold rounded transition-colors flex items-center gap-1 cursor-pointer"
-                          title="ดึงค่าพิกัดมาจาก Image Size Setting"
-                      >
-                          📥 ดึงค่าจาก Image Size Setting
-                      </button>
+                  <div className="ml-6 mt-2 flex items-center justify-end gap-2">
                       <button 
                           type="button"
                           onClick={saveCoordsToDatabase}
@@ -566,6 +1034,7 @@ export default function ControlPage() {
                         const s = data.screenshots;
                         if (s.domains) setCapturedScreenshot(s.domains);
                         if (s.dns) setCapturedDnsScreenshot(s.dns);
+                        if (s.loadBalancingSpectrum) setCapturedLoadBalancingSpectrumScreenshot(s.loadBalancingSpectrum);
                         if (s.traffic) setCapturedHttpTrafficScreenshot(s.traffic);
                         if (s.trafficSub1) setCapturedHttpTrafficScreenshot1(s.trafficSub1);
                         if (s.trafficSub2) setCapturedHttpTrafficScreenshot2(s.trafficSub2);
@@ -579,8 +1048,11 @@ export default function ControlPage() {
                         if (s.speedMobile) setCapturedSpeedMobileScreenshot(s.speedMobile);
                         if (s.botManagement) setCapturedBotManagementScreenshot(s.botManagement);
                         if (s.securityLevel) setCapturedSecurityLevelScreenshot(s.securityLevel);
+                        if (s.browserIntegrity) setCapturedBrowserIntegrityScreenshot(s.browserIntegrity);
                         if (s.sslOverview) setCapturedSslOverviewScreenshot(s.sslOverview);
                         if (s.sslEdge) setCapturedSslEdgeScreenshot(s.sslEdge);
+                        if (s.minTlsVersion) setCapturedMinTlsVersionScreenshot(s.minTlsVersion);
+                        if (s.tls13) setCapturedTls13Screenshot(s.tls13);
                         if (s.rateLimiting) setCapturedRateLimitingScreenshot(s.rateLimiting);
                         if (s.managedRules) setCapturedManagedRulesScreenshot(s.managedRules);
                         if (s.ipAccess) setCapturedIpAccessScreenshot(s.ipAccess);
@@ -630,6 +1102,13 @@ export default function ControlPage() {
                     };
                     setCoords(defaultCoords);
                 });
+            // Fetch presets
+            fetchPresets();
+            const savedPresetId = localStorage.getItem('control_activePresetId');
+            if (savedPresetId) {
+                setActivePresetId(savedPresetId);
+            }
+
             // Clear stepStatus from localStorage on refresh
             localStorage.removeItem('control_stepStatus');
         }
@@ -1286,7 +1765,7 @@ export default function ControlPage() {
     const ALL_CAPTURE_TABS = [
         { id: 'domains', label: 'Domains', hasData: !!capturedScreenshot, icon: '🌐', type: 'domains', path: '/domains/overview', setter: setCapturedScreenshot, key: 'control_capturedScreenshot', isDynamic: true },
         { id: 'dns', label: 'DNS Records', hasData: !!(capturedDnsScreenshot && (Array.isArray(capturedDnsScreenshot) ? capturedDnsScreenshot.length > 0 : true)), icon: '💾', type: 'dns', path: '/dns/records', setter: setCapturedDnsScreenshot, key: 'control_capturedDnsScreenshot', isDynamic: true },
-        { id: 'loadBalancingSpectrum', label: 'Load Balancing & Spectrum', hasData: !!capturedLoadBalancingSpectrumScreenshot, icon: '⚖️', type: 'load-balancing-spectrum', path: '/dns/records', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
+        { id: 'loadBalancingSpectrum', label: 'Load Balancing & Spectrum', hasData: !!capturedLoadBalancingSpectrumScreenshot, icon: '⚖️', type: 'load-balancing-spectrum', path: '/traffic/load-balancing', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
         { id: 'botManagement', label: 'Bot Management', hasData: !!capturedBotManagementScreenshot, icon: '🤖', type: 'bot-management', path: '/security/settings', setter: setCapturedBotManagementScreenshot, key: 'control_capturedBotManagementScreenshot' },
         { id: 'securityLevel', label: 'Security Level', hasData: !!capturedSecurityLevelScreenshot, icon: '🛡️', type: 'security-level', path: '/security/settings', setter: setCapturedSecurityLevelScreenshot, key: 'control_capturedSecurityLevelScreenshot' },
         { id: 'browserIntegrity', label: 'Browser Integrity', hasData: !!capturedBrowserIntegrityScreenshot, icon: '🛡️', type: 'browser-integrity-check', path: '/security/settings', setter: setCapturedBrowserIntegrityScreenshot, key: 'control_capturedBrowserIntegrityScreenshot' },
@@ -1701,6 +2180,143 @@ export default function ControlPage() {
                             </div>
                         )}
 
+                        {/* Preset & Coordinate Management Toolbar */}
+                        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-3 mb-3.5 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 shadow-inner">
+                            {/* Preset Selection & Info */}
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-300">
+                                    <Sliders className="w-4 h-4 text-rose-400" />
+                                    <span>Preset พิกัด:</span>
+                                </div>
+                                <select
+                                    value={activePresetId}
+                                    onChange={(e) => handleSelectPreset(e.target.value)}
+                                    className="bg-gray-950 border border-gray-700/80 rounded-lg px-3 py-1.5 text-xs text-rose-200 font-medium focus:outline-none focus:border-rose-500/60 transition-colors cursor-pointer min-w-[180px] max-w-[260px] truncate"
+                                >
+                                    <option value="default">Standard Default (Auto +0)</option>
+                                    {presets.map(p => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.name} {p.createdByName ? `(@${p.createdBy})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {/* Creator & Permission Badge */}
+                                {activePreset ? (
+                                    <div className="flex items-center gap-1 px-2 py-1 bg-gray-950/80 border border-gray-800 rounded text-[11px] font-mono">
+                                        <span className="text-gray-400">👤 โดย:</span>
+                                        <span className="text-rose-300 font-semibold truncate max-w-[100px]" title={activePreset.createdByName || activePreset.createdBy}>
+                                            @{activePreset.createdBy}
+                                        </span>
+                                        {isOwnerOrAdmin ? (
+                                            <span className="ml-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-800/40" title="คุณมีสิทธิ์แก้ไข/ลบ Preset นี้">
+                                                ✓ แก้ไขได้
+                                            </span>
+                                        ) : (
+                                            <span className="ml-1 text-[10px] text-amber-400 font-bold bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-800/40" title="เฉพาะผู้สร้างหรือ Admin เท่านั้นที่แก้ไขได้">
+                                                🔒 อ่านอย่างเดียว
+                                            </span>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <span className="text-[11px] text-gray-400 font-mono bg-gray-950/60 border border-gray-800/60 px-2 py-1 rounded">
+                                        ⚙️ ค่าเริ่มต้นระบบ
+                                    </span>
+                                )}
+
+                                {/* Action Buttons for Active Preset */}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveAsNewPreset}
+                                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+                                        title="บันทึกพิกัดปัจจุบันเป็น Preset ใหม่"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>บันทึกเป็น Preset ใหม่</span>
+                                    </button>
+
+                                    {activePreset && activePresetId !== 'default' && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                disabled={!isOwnerOrAdmin}
+                                                onClick={handleUpdatePreset}
+                                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
+                                                    isOwnerOrAdmin
+                                                        ? 'bg-blue-600/20 hover:bg-blue-600/40 border-blue-500/50 text-blue-300'
+                                                        : 'bg-gray-800/50 border-gray-700/40 text-gray-500 opacity-50 cursor-not-allowed'
+                                                }`}
+                                                title={isOwnerOrAdmin ? "บันทึกพิกัดปัจจุบันทับ Preset นี้" : "เฉพาะผู้สร้างหรือ Admin เท่านั้นที่แก้ไขได้"}
+                                            >
+                                                <Save className="w-3.5 h-3.5" />
+                                                <span>บันทึกทับ</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={!isOwnerOrAdmin}
+                                                onClick={handleRenamePreset}
+                                                className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
+                                                    isOwnerOrAdmin
+                                                        ? 'bg-amber-600/20 hover:bg-amber-600/40 border-amber-500/50 text-amber-300'
+                                                        : 'bg-gray-800/50 border-gray-700/40 text-gray-500 opacity-50 cursor-not-allowed'
+                                                }`}
+                                                title={isOwnerOrAdmin ? "เปลี่ยนชื่อ Preset" : "เฉพาะผู้สร้างหรือ Admin เท่านั้นที่แก้ไขได้"}
+                                            >
+                                                <Edit3 className="w-3.5 h-3.5" />
+                                                <span>เปลี่ยนชื่อ</span>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                disabled={!isOwnerOrAdmin}
+                                                onClick={handleDeletePreset}
+                                                className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
+                                                    isOwnerOrAdmin
+                                                        ? 'bg-rose-950/60 hover:bg-rose-900 border-rose-600/50 text-rose-300'
+                                                        : 'bg-gray-800/50 border-gray-700/40 text-gray-500 opacity-50 cursor-not-allowed'
+                                                }`}
+                                                title={isOwnerOrAdmin ? "ลบ Preset นี้" : "เฉพาะผู้สร้างหรือ Admin เท่านั้นที่ลบได้"}
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <span>ลบ</span>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Export / Import JSON Section */}
+                            <div className="flex items-center gap-2 border-t xl:border-t-0 pt-2 xl:pt-0 border-gray-800 shrink-0">
+                                <input
+                                    type="file"
+                                    ref={jsonImportInputRef}
+                                    onChange={handleImportJson}
+                                    accept=".json,application/json"
+                                    className="hidden"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => jsonImportInputRef.current?.click()}
+                                    className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:text-white"
+                                    title="นำเข้าการตั้งค่าพิกัดจากไฟล์ JSON"
+                                >
+                                    <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                                    <span>Import JSON</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleExportJson}
+                                    className="px-3 py-1.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                                    title="ส่งออกการตั้งค่าพิกัดทั้งหมดออกเป็นไฟล์ JSON"
+                                >
+                                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Export JSON</span>
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Tab Sidebar layout */}
                         <div className="flex flex-col md:flex-row gap-4 flex-1">
                             {/* Left-hand sidebar nav bar */}
@@ -1739,7 +2355,7 @@ export default function ControlPage() {
                                     const tabMap = {
                                         domains: { label: 'Domains Overview', img: capturedScreenshot, type: 'domains', path: '/domains/overview', setter: setCapturedScreenshot, key: 'control_capturedScreenshot' },
                                         dns: { label: 'DNS Records', img: (capturedDnsScreenshot && Array.isArray(capturedDnsScreenshot) && capturedDnsScreenshot.length > 0) ? capturedDnsScreenshot : (capturedDnsScreenshot ? [capturedDnsScreenshot] : null), type: 'dns', path: '/dns/records', setter: setCapturedDnsScreenshot, key: 'control_capturedDnsScreenshot', isArray: true },
-                                        loadBalancingSpectrum: { label: 'Load Balancing & Spectrum (IF Enable)', img: capturedLoadBalancingSpectrumScreenshot, type: 'load-balancing-spectrum', path: '/dns/records', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
+                                        loadBalancingSpectrum: { label: 'Load Balancing & Spectrum (IF Enable)', img: capturedLoadBalancingSpectrumScreenshot, type: 'load-balancing-spectrum', path: '/traffic/load-balancing', setter: setCapturedLoadBalancingSpectrumScreenshot, key: 'control_capturedLoadBalancingSpectrumScreenshot' },
                                         botManagement: { label: 'Bot Management', img: capturedBotManagementScreenshot, type: 'bot-management', path: '/security/settings', setter: setCapturedBotManagementScreenshot, key: 'control_capturedBotManagementScreenshot' },
                                         securityLevel: { label: 'Security Level & BIC', img: capturedSecurityLevelScreenshot, type: 'security-level', path: '/security/settings', setter: setCapturedSecurityLevelScreenshot, key: 'control_capturedSecurityLevelScreenshot' },
                                         browserIntegrity: { label: 'Browser Integrity Check (IF Enable)', img: capturedBrowserIntegrityScreenshot, type: 'browser-integrity-check', path: '/security/settings', setter: setCapturedBrowserIntegrityScreenshot, key: 'control_capturedBrowserIntegrityScreenshot' },
@@ -1844,14 +2460,6 @@ export default function ControlPage() {
                                                         <span>Crop Coordinates ({current.label})</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={pullFromImageSizeSettings}
-                                                            className="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-[10px] font-semibold rounded transition-colors cursor-pointer flex items-center gap-1"
-                                                            title="ดึงค่าจาก Image Size Setting"
-                                                        >
-                                                            📥 ดึงจาก Image Size
-                                                        </button>
                                                         <button
                                                             type="button"
                                                             onClick={saveCoordsToDatabase}

@@ -68,9 +68,9 @@ const SECTION_TARGETS = {
         description: 'ฟีเจอร์ Browser Integrity Check ปิดการใช้งาน (Disabled) หรือไม่พบในแพ็กเกจนี้'
     },
     'load-balancing-spectrum': {
-        title: '⚖️ Load Balancing and Spectrum records',
-        keywords: ['load balancing', 'spectrum', 'load balancing and spectrum'],
-        description: 'ไม่พบการตั้งค่าหรือบันทึก Load Balancing / Spectrum records ในโดเมนนี้ (Not Configured / Disabled)'
+        title: '⚖️ Load Balancing',
+        keywords: ['load balancing', 'manage public load balancers', 'load balancers', 'traffic'],
+        description: 'ไม่พบการตั้งค่า Load Balancing ในโดเมนนี้ (Not Configured / Disabled)'
     },
     'argo': {
         title: '⚡ Argo Smart Routing',
@@ -231,7 +231,7 @@ export async function GET(request) {
                 { id: 'speedMobile', file: 'captured-speed-mobile.png' },
                 { id: 'minTlsVersion', file: 'captured-min-tls-version.png' },
                 { id: 'tls13', file: 'captured-tls-1-3.png' },
-                { id: 'browserIntegrity', file: 'captured-browser-integrity-check.png' },
+                { id: 'browserIntegrity', file: 'captured-browser-integrity.png', altFile: 'captured-browser-integrity-check.png' },
                 { id: 'loadBalancingSpectrum', file: 'captured-load-balancing-spectrum.png' }
             ];
 
@@ -275,7 +275,12 @@ export async function GET(request) {
             for (const item of tabs) {
                 const p1 = path.join(dbCapturedDir, item.file);
                 const p2 = path.join(publicDir, item.file);
-                const target = fs.existsSync(p1) ? p1 : (fs.existsSync(p2) ? p2 : null);
+                let target = fs.existsSync(p1) ? p1 : (fs.existsSync(p2) ? p2 : null);
+                if (!target && item.altFile) {
+                    const altP1 = path.join(dbCapturedDir, item.altFile);
+                    const altP2 = path.join(publicDir, item.altFile);
+                    target = fs.existsSync(altP1) ? altP1 : (fs.existsSync(altP2) ? altP2 : null);
+                }
                 if (target) {
                     try {
                         const buf = fs.readFileSync(target);
@@ -503,8 +508,8 @@ export async function GET(request) {
             const URL_MAPPING = {
                 'domains': (acc) => `https://dash.cloudflare.com/${acc}/domains/overview`,
                 'dns': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
-                'load-balancing-spectrum': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
-                'load-balancing': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/dns/records`,
+                'load-balancing-spectrum': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/traffic/load-balancing`,
+                'load-balancing': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/traffic/load-balancing`,
                 'traffic': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'traffic-countries': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/analytics/traffic`,
                 'firewall': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/analytics/events`,
@@ -528,17 +533,41 @@ export async function GET(request) {
                 'speed-mobile': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`
             };
 
+            const isSameCloudflarePage = (cur, tgt) => {
+                if (!cur || !tgt) return false;
+                try {
+                    const curObj = new URL(cur);
+                    const tgtObj = new URL(tgt);
+                    
+                    const curPath = curObj.pathname.toLowerCase().replace(/\/+$/, '');
+                    const tgtPath = tgtObj.pathname.toLowerCase().replace(/\/+$/, '');
+                    
+                    const pathMatches = (curPath === tgtPath) || 
+                                        curPath.endsWith(tgtPath.replace(/^\/[a-f0-9]+/, '')) ||
+                                        tgtPath.endsWith(curPath.replace(/^\/[a-f0-9]+/, ''));
+                    
+                    if (tgtObj.search && tgtObj.search.length > 1) {
+                        return pathMatches && (curObj.search === tgtObj.search);
+                    }
+                    return pathMatches;
+                } catch {
+                    const cleanCur = (cur || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
+                    const cleanTgt = (tgt || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
+                    return cleanCur === cleanTgt || cleanCur.endsWith(cleanTgt);
+                }
+            };
+
             const targetFn = URL_MAPPING[type];
             if (targetFn && accId) {
                 const targetUrl = (type === 'domains') ? targetFn(accId) : (zoneName ? targetFn(accId, zoneName) : null);
                 if (targetUrl) {
-                    const cleanCurrent = currentUrl.split('?')[0].replace(/\/$/, '');
-                    const cleanTarget = targetUrl.split('?')[0].replace(/\/$/, '');
-                    
-                    if (cleanCurrent !== cleanTarget && !cleanCurrent.endsWith(cleanTarget.split('.com/')[1])) {
+                    const isAlreadyOnPage = isSameCloudflarePage(currentUrl, targetUrl);
+                    if (!isAlreadyOnPage) {
                         console.log(`Auto-navigating page from ${currentUrl} to ${targetUrl}...`);
-                        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 12000 });
-                        await new Promise(r => setTimeout(r, 1200));
+                        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+                        await new Promise(r => setTimeout(r, 1000));
+                    } else {
+                        console.log(`⚡ [SKIP AUTO-NAV] Chrome is already on target page (${currentUrl}). Skipping reload & redirect to protect against bot detection.`);
                     }
                 }
             }
@@ -667,10 +696,18 @@ export async function GET(request) {
         let sub5Buffer = null;
 
         while (hasNextPage) {
-            console.log(`Processing page ${pageIndex} of ${type}...`);
-
             // 2. Wait dynamically for page elements to be loaded and verify NO lazy loading skeleton or spinner exists
             console.log(`Checking for lazy loading elements and waiting for ${type} page ${pageIndex} content to finish rendering...`);
+            
+            // Trigger micro-scroll to wake up lazy intersection observers and virtualized rows
+            try {
+                await page.evaluate(() => {
+                    window.scrollBy(0, 15);
+                    setTimeout(() => window.scrollBy(0, -15), 50);
+                });
+                await new Promise(r => setTimeout(r, 200));
+            } catch (e) {}
+
             try {
                 await page.waitForFunction((captureType) => {
                     const findElementByText = (selector, text) => {
@@ -681,45 +718,159 @@ export async function GET(request) {
                             return isVisible && content.trim().toLowerCase().includes(text.toLowerCase());
                         });
                     };
-                    
-                    // Check if any visible skeleton loader, loading spinner, progress bar or spinner is active
-                    const isLoaderActive = !!(
-                        document.querySelector('[class*="skeleton"], [class*="loading"], [role="progressbar"], svg[class*="spin"], [class*="spinner"]') ||
+
+                    // 1. Check if any skeleton loader, loading spinner, progress bar or shimmering placeholder is active
+                    const hasShimmerOrSkeleton = !!(
+                        document.querySelector('[class*="skeleton"], [class*="Skeleton"], [class*="shimmer"], [data-testid*="skeleton"], [data-testid*="loading"], [role="progressbar"], svg[class*="spin"], [class*="spinner"], [aria-busy="true"]') ||
                         Array.from(document.querySelectorAll('span, div, p')).find(el => {
-                            const text = (el.textContent || '').toLowerCase();
-                            return (el.offsetWidth > 0 || el.offsetHeight > 0) && (text.includes('loading') || text.includes('please wait'));
+                            const text = (el.textContent || '').trim().toLowerCase();
+                            const isVisible = (el.offsetWidth > 0 || el.offsetHeight > 0);
+                            return isVisible && (text === 'loading...' || text === 'loading' || text.includes('fetching data') || text.includes('please wait') || text.includes('loading table'));
                         })
                     );
+                    if (hasShimmerOrSkeleton) return false;
 
-                    // Ensure heading H1-H4 title is visible
-                    const headingText = (
-                        captureType === 'traffic' || captureType === 'traffic-countries' ? 'traffic' :
-                        captureType === 'dns' ? 'dns' :
-                        captureType === 'firewall' || captureType === 'top-events-source' ? 'security' :
-                        captureType === 'security-rules' || captureType === 'rate-limiting' || captureType === 'managed-rules' || captureType === 'ip-access-rules' || captureType === 'zone-lockdown' ? 'rules' :
-                        captureType === 'bot-management' || captureType === 'security-level' ? 'settings' :
-                        captureType === 'ssl-overview' ? 'ssl' :
-                        captureType === 'ssl-edge' ? 'certificates' :
-                        captureType === 'argo' ? 'argo' :
-                        (captureType === 'speed' || captureType === 'speed-mobile') ? 'speed' : 'domains'
-                    );
-                    const heading = findElementByText('h1, h2, h3, h4, span, div', headingText) || document.querySelector('main');
-                    // Ensure table body, pagination footer, or traffic chart is loaded
-                    let tableOrFooter = true;
-                    if (captureType === 'traffic' || captureType === 'traffic-countries' || captureType === 'argo' || captureType === 'speed' || captureType === 'speed-mobile') {
-                        tableOrFooter = findElementByText('div, span, button, p, td', 'requests') || findElementByText('div, span, h1, h2, h3, h4', 'traffic') || findElementByText('div, span, button, p, td', 'result') || document.querySelector('svg, canvas, button');
-                    } else if (captureType === 'domains') {
-                        tableOrFooter = document.querySelector('[data-testid*="table_row"], [role="row"], [role="table"]') || findElementByText('div, span, button, p, td', 'Showing 1') || document.querySelector('table');
-                    } else {
-                        tableOrFooter = findElementByText('div, span, button, p, td', 'of') || findElementByText('div, span, button, p, td', 'items') || document.querySelector('table, form, section, main');
+                    // 2. Type-specific Data Content Verification (Ensures actual entries/items exist, not just titles)
+                    if (captureType === 'domains') {
+                        const hasRows = !!(
+                            document.querySelector('[data-testid*="table_row"]') ||
+                            (document.querySelectorAll('[role="row"]').length > 1) ||
+                            (document.querySelectorAll('tbody tr').length > 0) ||
+                            findElementByText('div, span, button, p, td', 'Showing 1')
+                        );
+                        return hasRows;
                     }
-                                          
-                    // Complete if heading and footer/table exist AND no loading placeholders are active
-                    return !!(heading && tableOrFooter && !isLoaderActive);
+
+                    if (captureType === 'dns') {
+                        const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"], [data-testid*="dns-record"]'));
+                        const hasDnsData = rows.some(r => {
+                            const txt = (r.innerText || r.textContent || '').trim().toLowerCase();
+                            return (txt.includes('a\t') || txt.includes('cname') || txt.includes('mx') || txt.includes('txt') || txt.includes('proxied') || txt.includes('dns only') || txt.includes('auto') || txt.includes('records added'));
+                        }) || !!findElementByText('div, span, p, td', 'records added') || !!findElementByText('div, span, p, td', 'Showing 1');
+                        return hasDnsData;
+                    }
+
+                    if (captureType === 'load-balancing-spectrum' || captureType === 'load-balancing') {
+                        const lbTable = document.querySelector('[data-testid*="load-balancing-table"]') || document.querySelector('[role="table"]');
+                        const dataRows = Array.from(document.querySelectorAll('[data-testid*="row_"], [role="row"], table tbody tr'));
+                        const hasLbRows = dataRows.some(r => {
+                            const txt = (r.innerText || r.textContent || '').trim().toLowerCase();
+                            return (txt.includes('pool') || txt.includes('automatic') || txt.includes('critical') || txt.includes('healthy') || txt.includes('edit') || txt.includes('hostname'));
+                        });
+                        const hasLbEmptyOrActive = !!(
+                            findElementByText('h1, h2, h3, div, p, span', 'Manage public load balancers') ||
+                            findElementByText('h1, h2, h3, div, p, span', 'Load Balancing is active') ||
+                            findElementByText('h1, h2, h3, div, p, span', 'No load balancers')
+                        );
+                        return !!(lbTable && (hasLbRows || hasLbEmptyOrActive));
+                    }
+
+                    if (captureType === 'traffic' || captureType === 'traffic-countries') {
+                        const hasChart = !!(
+                            document.querySelector('svg path[d], canvas') ||
+                            document.querySelector('[class*="recharts"], [class*="chart"]') ||
+                            findElementByText('div, span, p, h3', 'requests') ||
+                            findElementByText('div, span, p, h3', 'bandwidth') ||
+                            findElementByText('div, span, p, h3', 'unique visitors')
+                        );
+                        return hasChart;
+                    }
+
+                    if (captureType === 'firewall' || captureType === 'top-events-source') {
+                        const hasEvents = !!(
+                            document.querySelector('svg path[d], canvas, table tbody tr, [role="row"]') ||
+                            findElementByText('div, span, p, h3', 'Activity log') ||
+                            findElementByText('div, span, p, h3', 'Events') ||
+                            findElementByText('div, span, p, h3', 'Total events') ||
+                            findElementByText('div, span, p, h3', 'No events')
+                        );
+                        return hasEvents;
+                    }
+
+                    if (captureType === 'security-rules' || captureType === 'rate-limiting' || captureType === 'managed-rules' || captureType === 'ip-access-rules' || captureType === 'zone-lockdown') {
+                        const hasRulesOrEmpty = !!(
+                            document.querySelector('table tbody tr, [role="row"], [data-testid*="rule"], [class*="rule"]') ||
+                            findElementByText('div, span, p, h3, button', 'Create rule') ||
+                            findElementByText('div, span, p, h3, button', 'rule active') ||
+                            findElementByText('div, span, p, h3, button', 'rules active') ||
+                            findElementByText('div, span, p, h3', 'No rules') ||
+                            findElementByText('div, span, p, h3', 'No custom rules')
+                        );
+                        return hasRulesOrEmpty;
+                    }
+
+                    if (captureType === 'bot-management') {
+                        const hasBotControl = !!(
+                            document.querySelector('button[role="switch"], input[type="checkbox"], [class*="toggle"]') ||
+                            findElementByText('h1, h2, h3, h4, span, p, div', 'Bot Fight Mode') ||
+                            findElementByText('h1, h2, h3, h4, span, p, div', 'Super Bot Fight Mode') ||
+                            findElementByText('h1, h2, h3, h4, span, p, div', 'Bot Management')
+                        );
+                        return hasBotControl;
+                    }
+
+                    if (captureType === 'security-level') {
+                        const hasSecLevel = !!(
+                            document.querySelector('select, [role="combobox"], [role="radiogroup"], input[type="radio"]') ||
+                            findElementByText('div, span, button, p', 'Medium') ||
+                            findElementByText('div, span, button, p', 'High') ||
+                            findElementByText('div, span, button, p', 'Essentially Off') ||
+                            findElementByText('div, span, button, p', 'I\'m Under Attack')
+                        );
+                        return hasSecLevel;
+                    }
+
+                    if (captureType === 'browser-integrity-check' || captureType === 'browser-integrity') {
+                        const hasBic = !!(
+                            document.querySelector('button[role="switch"], input[type="checkbox"], [class*="toggle"]') ||
+                            findElementByText('h1, h2, h3, h4, span, p, label', 'Browser Integrity Check')
+                        );
+                        return hasBic;
+                    }
+
+                    if (captureType === 'ssl-overview') {
+                        const hasSslMode = !!(
+                            findElementByText('div, span, label, p, h3', 'Full') ||
+                            findElementByText('div, span, label, p, h3', 'Strict') ||
+                            findElementByText('div, span, label, p, h3', 'Flexible') ||
+                            findElementByText('div, span, label, p, h3', 'Off') ||
+                            document.querySelector('[role="radiogroup"], input[type="radio"]')
+                        );
+                        return hasSslMode;
+                    }
+
+                    if (captureType === 'min-tls-version' || captureType === 'ssl-edge') {
+                        const hasTlsVer = !!(
+                            document.querySelector('select, [role="combobox"]') ||
+                            findElementByText('div, span, button, p', 'TLS 1.') ||
+                            findElementByText('div, span, button, p', '1.2') ||
+                            findElementByText('div, span, button, p', '1.3') ||
+                            findElementByText('h1, h2, h3, h4, label', 'Minimum TLS Version')
+                        );
+                        return hasTlsVer;
+                    }
+
+                    if (captureType === 'tls-1-3') {
+                        const hasTls13 = !!(
+                            document.querySelector('button[role="switch"], input[type="checkbox"], [class*="toggle"]') ||
+                            findElementByText('h1, h2, h3, h4, label, span', 'TLS 1.3')
+                        );
+                        return hasTls13;
+                    }
+
+                    if (captureType === 'argo') {
+                        const hasArgo = !!(
+                            document.querySelector('button[role="switch"], input[type="checkbox"], [class*="toggle"]') ||
+                            findElementByText('h1, h2, h3, h4, span, p', 'Argo Smart Routing')
+                        );
+                        return hasArgo;
+                    }
+
+                    return !!document.querySelector('main, table, form, section, [class*="card"]');
                 }, { timeout: 15000 }, type);
-                console.log(`${type} page ${pageIndex} loaded and verified: zero active lazy loading elements found.`);
-                // Add a short stabilize delay for visual rendering animations
-                await new Promise(r => setTimeout(r, 400));
+                console.log(`${type} page ${pageIndex} loaded and verified: actual items rendered and zero active lazy loading elements found.`);
+                // Add a stabilizing delay for animations and fonts
+                await new Promise(r => setTimeout(r, 600));
             } catch (err) {
                 console.warn(`Timeout waiting for page elements to finish lazy loading. Proceeding anyway:`, err.message);
             }
@@ -1171,6 +1322,50 @@ export async function GET(request) {
                         };
 
                         if (captureType === 'load-balancing-spectrum' || captureType === 'load-balancing') {
+                            const main = document.querySelector('main');
+                            const nav = document.querySelector('nav, aside');
+                            const lbTable = document.querySelector('[data-testid*="load-balancing-table"]') || document.querySelector('[role="table"]');
+                            const h1 = Array.from(document.querySelectorAll('h1, h2, h3, [role="heading"]')).find(h => {
+                                if (isInsideNav(h)) return false;
+                                const txt = (h.textContent || '').trim().toLowerCase();
+                                return txt === 'load balancing' || txt.startsWith('load balancing') || txt.includes('manage public load balancers');
+                            });
+
+                            if (lbTable || h1) {
+                                const col0 = main && main.children.length > 0 ? main.children[0] : null;
+                                const navRight = nav ? nav.getBoundingClientRect().right : 260;
+                                const col0Rect = col0 ? col0.getBoundingClientRect() : null;
+                                const lbTableRect = lbTable ? lbTable.getBoundingClientRect() : null;
+                                const h1Rect = h1 ? h1.getBoundingClientRect() : null;
+
+                                const scrollY = window.scrollY || window.pageYOffset || 0;
+                                const scrollX = window.scrollX || window.pageXOffset || 0;
+
+                                const autoStartX = Math.max(0, navRight + 15 + scrollX);
+                                const autoStartY = Math.max(0, (h1Rect ? h1Rect.top : (col0Rect ? col0Rect.top : 80)) + scrollY - 20);
+                                const rightBound = col0Rect ? (col0Rect.right - 15 + scrollX) : (autoStartX + 1120);
+                                const autoWidth = Math.max(800, rightBound - autoStartX);
+                                const bottomBound = lbTableRect ? (lbTableRect.bottom + 20 + scrollY) : (col0Rect ? (col0Rect.bottom + scrollY) : (autoStartY + 1000));
+                                const autoHeight = Math.max(300, bottomBound - autoStartY);
+
+                                const parsedXS = parseInt(qXS, 10);
+                                const parsedXE = parseInt(qXE, 10);
+                                const parsedYS = parseInt(qYS, 10);
+                                const parsedYE = parseInt(qYE, 10);
+
+                                const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                                const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                                const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                                const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                                return {
+                                    x: Math.floor(startX),
+                                    y: Math.floor(startY),
+                                    width: Math.ceil(targetWidth),
+                                    height: Math.ceil(targetHeight)
+                                };
+                            }
+
                             const allRows = Array.from(document.querySelectorAll('table tr, [role="row"]'));
                             const lbSpectrumRows = allRows.filter(r => {
                                 if (isInsideNav(r)) return false;
@@ -1190,7 +1385,7 @@ export async function GET(request) {
                                     return t === 'load balancing and spectrum records' || t === 'load balancing & spectrum' || t === 'load balancing' || t === 'spectrum records';
                                 });
                                 if (!hasSection) {
-                                    return { isDisabled: true, reason: 'ไม่พบการตั้งค่า Load Balancing หรือ Spectrum records ในโดเมนนี้ (Not Configured / Disabled)' };
+                                    return { isDisabled: true, reason: 'ไม่พบการตั้งค่า Load Balancing ในโดเมนนี้ (Not Configured / Disabled)' };
                                 }
                             }
 

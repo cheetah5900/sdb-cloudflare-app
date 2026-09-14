@@ -78,13 +78,23 @@ The frontend is built with React and Tailwind CSS, and the backend is powered by
 *   `app/systems/ntbc_cfreport/utils/alert.js`: SweetAlert2 custom toast and popup helper configuration.
 *   `app/api/ntbc-capture/route.js`: Multi-tab Puppeteer screenshot capture engine with dynamic bounding, search pre-filtering, and fallback generator.
 *   `app/api/ntbc-capture-coords/route.js`: API endpoint for reading and persisting coordinate offsets.
+*   `app/api/ntbc-capture-presets/route.js`: API endpoint for managing coordinate presets with role-based permissions (Creator/Admin).
 *   `app/data/capture_coords.json`: Centralized coordinate offset storage file.
+*   `app/data/capture_presets.json`: Fallback persistence file for capture presets.
 *   `app/systems/gdcc/page.js`: GDCC Analytics and Batch Report generator.
 *   `app/systems/Sidebar.js`: Global sidebar navigation component.
 *   `app/utils/themes.js`: Global theme tokens configuration.
 
 # Recent Changes (September 2026)
 
+*   **Capture Coordinate Preset Management & JSON Export/Import:** Implemented full preset management in `/systems/ntbc_cfreport/control` with backend CRUD API (`/api/ntbc-capture-presets`) and SQLite storage (`capture_presets` table). Includes:
+    *   **Named Presets:** Create, switch, rename, update, and delete presets for coordinate crops.
+    *   **Role & Ownership Permissions:** Users have full rights to manage their own created presets; Admins/Root have full unrestricted rights across all presets. Non-authorized users receive clear "Read-only" badges and locked actions.
+    *   **JSON Export & Import:** Export full capture coordinates & preset metadata to a formatted `.json` file download, and import `.json` files back with options to either apply immediately or save as a new named preset.
+*   **Persistent Screenshot Hydration & Post-Restart Restoration:** Fixed state hydration in `app/systems/ntbc_cfreport/control/page.js` and `app/api/ntbc-capture/route.js` (`get-saved` action). Added missing UI setters and fallback filename resolution for `loadBalancingSpectrum`, `minTlsVersion`, `tls13`, and `browserIntegrity`, ensuring all 21 captured screenshot badges and image previews load immediately after server restart without requiring re-captures.
+*   **Intelligent URL Comparison & Anti-Bot Redirection Bypass (`isSameCloudflarePage`):** Enhanced navigation engines in `/api/ntbc-control-chrome` and `/api/ntbc-capture` to perform deep pathname & query string normalization. If Chrome is already on the target URL (e.g. `/security/settings` when capturing multiple security cards, or `/ssl-tls/edge-certificates`), redundant `page.goto()` and reloads are automatically skipped, drastically speeding up captures and preventing Cloudflare bot detection/challenges.
+*   **Universal Real Data & Lazy-Loading Pre-Capture Verification Engine:** Implemented comprehensive pre-capture checks across all capture types (`waitForFunction`) that ensure no skeletons/spinners/shimmering placeholders are active AND verifies that actual data rows/entries (e.g. DNS records, Load Balancers table rows, WAF rule lists, chart SVGs/canvases, toggle controls) are fully populated in the DOM before computing bounds and taking screenshots.
+*   **Load Balancing & Spectrum Dedicated Routing & Capture Fix (`/traffic/load-balancing`):** Updated capture routing for `load-balancing-spectrum` to navigate directly to `/traffic/load-balancing`, capturing the full header, active status, usage quotas, and the `Manage public load balancers` table with verified Apple Vision OCR detection.
 *   **Screenshot Variable Live Preview in Template Editor:** Added `👁️ ตัวอย่าง` (Preview) buttons to all `@captured_*` variables in the ReportModal sidebar. Clicking opens a modal showing the latest captured screenshot from disk, or triggers a top-right warning toast if no screenshot exists.
 *   **Granular SSL/TLS & DNS Capture Endpoints:** Added dedicated capture endpoints and variables for `Minimum TLS Version` (`@captured_min_tls_version`), `TLS 1.3` (`@captured_tls_1_3`), `Browser Integrity Check` (`@captured_browser_integrity`), and `Load Balancing & Spectrum` (`@captured_load_balancing_spectrum`).
 *   **Control Panel Tab Consolidation:** Removed redundant `Edge Certificates` tab from the control panel in favor of dedicated `SSL/TLS Mode` (🔒), `Min TLS Version` (🔒), and `TLS 1.3` (⚡).

@@ -50,9 +50,13 @@ next-env.d.ts
 /app/data/templates.json
 /app/data/templates/
 /app/data/ntbc_templates.json
+/app/data/capture_presets.json
+/downloads/
 /downloads/templates.json
 /downloads/ntbc_templates.json
 /downloads/templates/
+/downloads/capture_coords.json
+/downloads/capture_presets.json
 *.docx
 *.html
 

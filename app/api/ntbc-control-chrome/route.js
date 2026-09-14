@@ -69,19 +69,35 @@ export async function GET(request) {
         }
 
         // Check if browser is already on target URL
+        // Check if browser is already on target URL or equivalent Cloudflare page
         const currentUrl = page.url() || '';
-        const normalizeUrl = (u) => {
+        const isSameCloudflarePage = (cur, tgt) => {
+            if (!cur || !tgt) return false;
             try {
-                const parsed = new URL(u);
-                return (parsed.origin + parsed.pathname).replace(/\/+$/, '') + parsed.search;
+                const curObj = new URL(cur);
+                const tgtObj = new URL(tgt);
+                
+                const curPath = curObj.pathname.toLowerCase().replace(/\/+$/, '');
+                const tgtPath = tgtObj.pathname.toLowerCase().replace(/\/+$/, '');
+                
+                const pathMatches = (curPath === tgtPath) || 
+                                    curPath.endsWith(tgtPath.replace(/^\/[a-f0-9]+/, '')) ||
+                                    tgtPath.endsWith(curPath.replace(/^\/[a-f0-9]+/, ''));
+                
+                if (tgtObj.search && tgtObj.search.length > 1) {
+                    return pathMatches && (curObj.search === tgtObj.search);
+                }
+                return pathMatches;
             } catch {
-                return (u || '').replace(/\/+$/, '');
+                const cleanCur = (cur || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
+                const cleanTgt = (tgt || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
+                return cleanCur === cleanTgt || cleanCur.endsWith(cleanTgt);
             }
         };
 
-        const isSameUrl = normalizeUrl(currentUrl) === normalizeUrl(targetUrl);
+        const isSameUrl = isSameCloudflarePage(currentUrl, targetUrl);
         if (isSameUrl) {
-            console.log(`⚡ [SKIP REDIRECT] Browser is already on target URL: ${currentUrl}. Skipping navigation to prevent Cloudflare bot detection.`);
+            console.log(`⚡ [SKIP REDIRECT] Browser is already on target URL/page: ${currentUrl}. Skipping reload & redirect to prevent Cloudflare bot challenges.`);
             await browser.disconnect();
             return Response.json({ 
                 success: true, 
