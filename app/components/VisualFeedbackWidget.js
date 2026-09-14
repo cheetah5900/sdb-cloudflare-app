@@ -165,19 +165,17 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
       textarea.select();
       try {
         document.execCommand('copy');
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
       } catch (err) {
         console.error('Fallback copy failed:', err);
       }
       document.body.removeChild(textarea);
+      handleCloseModal();
     };
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(formattedPrompt)
         .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2500);
+          handleCloseModal();
         })
         .catch(() => copyFallback(formattedPrompt));
     } else {
