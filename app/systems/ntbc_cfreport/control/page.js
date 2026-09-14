@@ -2394,25 +2394,6 @@ export default function ControlPage() {
                                                         )}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    disabled={isCapturingDirect}
-                                                    onClick={() => handleDirectCapture(activeCaptureTab, current.type, current.setter, current.key, current.path)}
-                                                    className={`px-3 py-1.5 bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/50 text-rose-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md self-start sm:self-auto ${
-                                                        isCapturingDirect ? 'opacity-60 cursor-not-allowed' : ''
-                                                    }`}
-                                                >
-                                                    {isCapturingDirect ? (
-                                                        <>
-                                                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-400" />
-                                                            <span>Capturing...</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <span>📸 Capture This Page Now</span>
-                                                        </>
-                                                    )}
-                                                </button>
                                             </div>
 
                                             {/* Screenshot Preview (Multi-image in 2 columns, single image centered) */}
@@ -2447,7 +2428,7 @@ export default function ControlPage() {
                                                     </div>
                                                     <div className="flex flex-col gap-1">
                                                         <p className="text-sm font-bold text-gray-300">ยังไม่มีรูปภาพที่บันทึกไว้</p>
-                                                        <p className="text-xs text-gray-500 max-w-md">กดปุ่ม <strong>"📸 Capture This Page Now"</strong> ด้านบน เพื่อจับภาพหน้าจอนี้จากเบราว์เซอร์สด</p>
+                                                        <p className="text-xs text-gray-500 max-w-md">กดปุ่ม <strong>"📸 Capture This Page Now"</strong> ด้านล่าง เพื่อจับภาพหน้าจอนี้จากเบราว์เซอร์สด</p>
                                                     </div>
                                                 </div>
                                             )}
@@ -2462,8 +2443,29 @@ export default function ControlPage() {
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             type="button"
+                                                            disabled={isCapturingDirect}
+                                                            onClick={() => handleDirectCapture(activeCaptureTab, current.type, current.setter, current.key, current.path)}
+                                                            className={`px-3 py-1 bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/60 text-rose-200 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                                                                isCapturingDirect ? 'opacity-60 cursor-not-allowed' : ''
+                                                            }`}
+                                                            title="กดเพื่อจับภาพหน้าจอนี้ทันที"
+                                                        >
+                                                            {isCapturingDirect ? (
+                                                                <>
+                                                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-300" />
+                                                                    <span>Capturing...</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <span>📸 Capture This Page Now</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            type="button"
                                                             onClick={saveCoordsToDatabase}
-                                                            className="px-2.5 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-semibold rounded transition-colors cursor-pointer shadow-sm"
+                                                            className="px-2.5 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer shadow-sm"
+                                                            title="บันทึกพิกัดลงฐานข้อมูลกลาง"
                                                         >
                                                             💾 Save to DB
                                                         </button>
