@@ -2570,21 +2570,6 @@ export default function ControlPage() {
                                                                     />
                                                                 </div>
                                                             </div>
-
-                                                            <div className="pt-2">
-                                                                <div className="text-[11px] text-cyan-300/90 bg-cyan-950/30 border border-cyan-800/50 rounded-lg p-2.5 space-y-1">
-                                                                    <div className="font-semibold flex items-center gap-1.5 text-cyan-200">
-                                                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-cyan-500/20 border border-cyan-500/40 text-cyan-300">📏 Smart Auto Crop & Offset</span>
-                                                                        <span>ทุกแท็บตัดครอบภาพตามขนาดองค์ประกอบ/ตาราง/การ์ดจริงอัตโนมัติ</span>
-                                                                    </div>
-                                                                    <p className="text-[10px] text-gray-300">
-                                                                        • <strong>Xstart / Xend (Offset)</strong>: ปรับระยะแนวนอนจากกรอบที่ตรวจจับได้ (ใส่ +/- เพื่อขยับหรือขยาย, ว่าง = Auto พอดีกรอบ)
-                                                                    </p>
-                                                                    <p className="text-[10px] text-gray-300">
-                                                                        • <strong>Ystart / Yend (Offset)</strong>: ปรับระยะแนวตั้งจากหัวข้อและท้ายตาราง (ใส่ +/- เพื่อขยับขึ้น/ลงหรือขยาย, ว่าง = Auto พอดีกรอบ)
-                                                                    </p>
-                                                                </div>
-                                                            </div>
                                                         </>
                                                     );
                                                 })()}
