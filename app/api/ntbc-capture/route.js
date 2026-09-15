@@ -1105,6 +1105,79 @@ export async function GET(request) {
                         return { x: startX, y: startY, width: targetWidth, height: targetHeight };
                     }
 
+                    if (captureType === 'zone-lockdown') {
+                        // 1. Find heading for Zone Lockdown
+                        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, [role="heading"], div, span'));
+                        const headingKws = ['zone lockdown', 'zone lockdown rules', 'lockdown'];
+                        let h = null;
+                        for (const kw of headingKws) {
+                            h = allElements.find(el => {
+                                if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
+                                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                                return (t === kw || t.startsWith(kw) || t.includes(kw)) && el.getBoundingClientRect().left > 150;
+                            });
+                            if (h) break;
+                        }
+
+                        // 2. Find card container or closest section for Zone Lockdown
+                        let card = null;
+                        if (h) {
+                            card = h.closest('.setting-card, [class*="card"], [data-sentry-element="Card"], section') ||
+                                   h.parentElement?.closest('.setting-card, [class*="card"], section');
+                        }
+
+                        // 3. Find table
+                        let table = card ? card.querySelector('table, [role="table"]') : null;
+                        if (!table) {
+                            const tables = Array.from(document.querySelectorAll('table, [role="table"]')).filter(t => t.offsetWidth > 0 && t.offsetHeight > 0);
+                            table = tables.find(t => {
+                                const txt = (t.innerText || t.textContent || '').toLowerCase();
+                                return txt.includes('url') || txt.includes('ip') || txt.includes('lockdown') || txt.includes('rule');
+                            }) || (tables.length > 1 ? tables[tables.length - 1] : tables[0]);
+                        }
+
+                        // 4. Find footer or pagination within card/table
+                        const allFooters = Array.from((card || document).querySelectorAll('div, span, button, p, td, li, footer'));
+                        const footer = allFooters.reverse().find(el => {
+                            if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
+                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+                            return (
+                                (t.includes(' of ') && /\d+\s*of\s*\d+/i.test(t)) ||
+                                t.startsWith('showing ') ||
+                                (t.includes(' of ') && (t.includes('1 -') || t.includes('1-') || t.includes('page '))) ||
+                                t.includes('records added') ||
+                                (t.includes('records') && /\d+/.test(t))
+                            );
+                        });
+
+                        const scrollY = window.scrollY || window.pageYOffset || 0;
+                        const hRect = h ? h.getBoundingClientRect() : (card ? card.getBoundingClientRect() : (table ? table.getBoundingClientRect() : { top: 400, left: 300 }));
+                        const cardRect = card ? card.getBoundingClientRect() : hRect;
+                        const tRect = table ? table.getBoundingClientRect() : null;
+                        const fRect = footer ? footer.getBoundingClientRect() : (tRect ? { bottom: tRect.bottom } : (card ? { bottom: cardRect.bottom } : { bottom: 950 }));
+
+                        const parsedXS = parseInt(qXS, 10);
+                        const parsedXE = parseInt(qXE, 10);
+                        const parsedYS = parseInt(qYS, 10);
+                        const parsedYE = parseInt(qYE, 10);
+
+                        const startTop = Math.min(hRect.top, cardRect.top, tRect ? (tRect.top - 40) : 9999);
+                        const startLeft = Math.min(hRect.left, cardRect.left, tRect ? tRect.left : 9999);
+                        const autoStartX = Math.max(0, Math.min(Math.round(window.innerWidth * 0.15), Math.round(startLeft) - 30));
+                        const autoStartY = Math.max(0, Math.round(startTop + scrollY) - 20);
+                        const autoWidth = 1350;
+                        const bottomCoord = (fRect.bottom || 950) + scrollY;
+                        const autoHeight = Math.max(200, Math.round(bottomCoord - autoStartY + 40));
+
+                        // If value > 500, treat as absolute coordinate; otherwise treat as offset (+/- px)
+                        const startX = (!isNaN(parsedXS) && parsedXS > 500) ? parsedXS : Math.max(0, autoStartX + (!isNaN(parsedXS) ? parsedXS : 0));
+                        const startY = (!isNaN(parsedYS) && parsedYS > 500) ? parsedYS : Math.max(0, autoStartY + (!isNaN(parsedYS) ? parsedYS : 0));
+                        const targetWidth = (!isNaN(parsedXE) && parsedXE > 500) ? Math.max(10, parsedXE - startX) : Math.max(100, autoWidth + (!isNaN(parsedXE) ? parsedXE : 0));
+                        const targetHeight = (!isNaN(parsedYE) && parsedYE > 500) ? Math.max(10, parsedYE - startY) : Math.max(100, autoHeight + (!isNaN(parsedYE) ? parsedYE : 0));
+
+                        return { x: startX, y: startY, width: targetWidth, height: targetHeight };
+                    }
+
                     if (captureType === 'bot-management') {
                         const botKeywords = ['super bot fight mode', 'bot fight mode', 'bot management'];
                         let matchedEl = null;
