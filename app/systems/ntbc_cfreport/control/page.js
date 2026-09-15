@@ -2086,13 +2086,6 @@ export default function ControlPage() {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={resetAll}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-xs font-bold transition-all border border-gray-700/50 cursor-pointer"
-                    >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Reset All Steps
-                    </button>
-                    <button
                         onClick={() => router.push('/systems/ntbc_cfreport')}
                         className="flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition-all shadow-lg hover:shadow-rose-900/30 cursor-pointer"
                     >
