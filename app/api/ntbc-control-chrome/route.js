@@ -148,6 +148,46 @@ export async function GET(request) {
             }, { status: 401 });
         }
 
+        // Inject visible scrollbars and ensure body scroll is enabled
+        try {
+            await page.evaluate(() => {
+                const styleId = 'force-scrollbars-visible';
+                let s = document.getElementById(styleId);
+                if (!s) {
+                    s = document.createElement('style');
+                    s.id = styleId;
+                    document.head.appendChild(s);
+                }
+                s.innerHTML = `
+                    ::-webkit-scrollbar {
+                        width: 14px !important;
+                        height: 14px !important;
+                        display: block !important;
+                    }
+                    ::-webkit-scrollbar-track {
+                        background: #1e1e2e !important;
+                    }
+                    ::-webkit-scrollbar-thumb {
+                        background: #6366f1 !important;
+                        border-radius: 7px !important;
+                    }
+                    ::-webkit-scrollbar-thumb:hover {
+                        background: #4f46e5 !important;
+                    }
+                    html, body {
+                        overflow-y: auto !important;
+                        height: auto !important;
+                    }
+                `;
+                if (document.body) {
+                    document.body.tabIndex = -1;
+                    document.body.focus();
+                }
+            });
+        } catch (scrollErr) {
+            console.warn('Could not inject visible scrollbars:', scrollErr.message);
+        }
+
         await browser.disconnect();
         return Response.json({ success: true, redirectedUrl: targetUrl });
     } catch (e) {
