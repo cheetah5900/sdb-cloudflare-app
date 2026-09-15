@@ -1047,110 +1047,38 @@ export async function GET(request) {
                             return false;
                         };
 
-                        // 1. Find heading for IP Access Rules
-                        const allElements = Array.from(document.querySelectorAll('main h1, main h2, main h3, main h4, main h5, main [role="heading"], main [class*="heading"], main [class*="title"], main div, main span, h1, h2, h3, h4, h5, [role="heading"], div, span'));
-                        const headingKws = ['ip access rules', 'ip access', 'access rules'];
-                        let h = null;
-                        for (const kw of headingKws) {
-                            h = allElements.find(el => {
-                                if (isInsideNav(el)) return false;
-                                if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-                                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                                return (t === kw || t.startsWith(kw) || t.includes(kw)) && el.getBoundingClientRect().left > 150;
-                            });
-                            if (h) break;
-                        }
-
-                        // 2. Find the next section heading on the tools page to ensure we never bleed into it (e.g. User Agent Blocking or Zone Lockdown)
-                        const nextHeading = allElements.find(el => {
+                        const allSpans = Array.from(document.querySelectorAll('span, div, h2, h3, h4'));
+                        const ipSpan = allSpans.find(el => {
                             if (isInsideNav(el)) return false;
-                            if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                            const top = el.getBoundingClientRect().top;
-                            const hTop = h ? h.getBoundingClientRect().top : 0;
-                            return top > (hTop + 50) && (t.startsWith('user agent blocking') || t.startsWith('zone lockdown'));
+                            return (el.innerText || '').trim().toLowerCase() === 'ip access rules' && el.getBoundingClientRect().left > 150;
                         });
 
-                        // 3. Find card container or closest bounded box
                         let card = null;
-                        if (h) {
-                            let cur = h.parentElement;
+                        if (ipSpan) {
+                            let cur = ipSpan.parentElement;
                             while (cur && cur !== document.body && cur.tagName !== 'MAIN') {
-                                const s = window.getComputedStyle(cur);
-                                const ch = cur.offsetHeight;
-                                const cw = cur.offsetWidth;
-                                if ((s.borderWidth !== '0px' && s.borderStyle !== 'none') || cur.getAttribute('data-testid') || cur.className?.includes?.('card') || cur.className?.includes?.('section')) {
-                                    if (cw > 500 && ch < 1400) {
-                                        card = cur;
-                                        break;
-                                    }
+                                const text = (cur.innerText || '').trim().toLowerCase();
+                                if (text.includes('ip access rules') && text.includes('create rule') && !text.includes('zone lockdown rules')) {
+                                    card = cur;
                                 }
                                 cur = cur.parentElement;
                             }
-                            if (!card) {
-                                card = h.closest('.setting-card, [class*="card"], [data-sentry-element="Card"], section');
-                            }
                         }
-
-                        // 4. Find table inside card or on page
-                        let table = card ? card.querySelector('table, [role="table"]') : null;
-                        if (!table) {
-                            const tables = Array.from(document.querySelectorAll('table, [role="table"]')).filter(t => !isInsideNav(t) && t.offsetWidth > 0 && t.offsetHeight > 0);
-                            table = tables.find(t => {
-                                const txt = (t.innerText || t.textContent || '').toLowerCase();
-                                return txt.includes('ip') || txt.includes('scope') || txt.includes('action') || txt.includes('allow') || txt.includes('block') || txt.includes('rule');
-                            }) || tables[0];
-                        }
-
-                        // 5. Find footer / pagination inside card or below table
-                        const searchRoot = card || (h ? h.parentElement : document);
-                        const cardFooters = Array.from(searchRoot.querySelectorAll('div, span, button, p, td, li, footer')).filter(el => !isInsideNav(el)).reverse();
-                        const footer = cardFooters.find(el => {
-                            if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                            return (
-                                (t.includes(' of ') && /\d+\s*of\s*\d+/i.test(t)) ||
-                                t.startsWith('showing ') ||
-                                (t.includes(' of ') && (t.includes('1 -') || t.includes('1-') || t.includes('page '))) ||
-                                t.includes('records added') ||
-                                (t.includes('records') && /\d+/.test(t))
-                            );
-                        });
 
                         const scrollY = window.scrollY || window.pageYOffset || 0;
-                        const hRect = h ? h.getBoundingClientRect() : null;
-                        const tableRect = table ? table.getBoundingClientRect() : null;
-                        const cardRect = card ? card.getBoundingClientRect() : null;
-                        const fRect = footer ? footer.getBoundingClientRect() : null;
-                        const nextHRect = nextHeading ? nextHeading.getBoundingClientRect() : null;
+                        const rect = card ? card.getBoundingClientRect() : null;
+                        
+                        let autoStartX = 320;
+                        let autoStartY = 1780;
+                        let autoWidth = 1350;
+                        let autoHeight = 265;
 
-                        // Start Y: top of heading (or table or card top)
-                        let rawStartY = 100;
-                        if (hRect) {
-                            rawStartY = hRect.top;
-                        } else if (cardRect) {
-                            rawStartY = cardRect.top;
-                        } else if (tableRect) {
-                            rawStartY = tableRect.top - 40;
+                        if (rect) {
+                            autoStartX = Math.max(0, Math.round(rect.left) - 15);
+                            autoStartY = Math.max(0, Math.round(rect.top + scrollY) - 25);
+                            autoWidth = Math.min(1920 - autoStartX, Math.round(rect.width) + 30);
+                            autoHeight = Math.max(100, Math.round(rect.height) + 40);
                         }
-
-                        // End Y: top of next heading, or bottom of footer / table / card
-                        let rawEndY = rawStartY + 450;
-                        if (nextHRect && nextHRect.top > rawStartY) {
-                            rawEndY = nextHRect.top - 20;
-                        } else if (fRect && fRect.bottom > rawStartY) {
-                            rawEndY = fRect.bottom + 25;
-                        } else if (tableRect && tableRect.bottom > rawStartY) {
-                            rawEndY = tableRect.bottom + 35;
-                        } else if (cardRect && cardRect.bottom > rawStartY && (cardRect.bottom - rawStartY) < 1200) {
-                            rawEndY = cardRect.bottom + 15;
-                        }
-
-                        const startLeft = tableRect ? Math.min(tableRect.left, hRect ? hRect.left : 9999) : (hRect ? hRect.left : 300);
-                        const autoStartX = Math.max(0, Math.min(Math.round(window.innerWidth * 0.15), Math.round(startLeft) - 30));
-                        const autoStartY = Math.max(0, Math.round(rawStartY + scrollY) - 20);
-                        const autoWidth = 1350;
-                        const autoHeight = Math.max(150, Math.min(1200, Math.round(rawEndY - rawStartY + 40)));
 
                         const parsedXS = parseInt(qXS, 10);
                         const parsedXE = parseInt(qXE, 10);
@@ -1180,101 +1108,38 @@ export async function GET(request) {
                             return false;
                         };
 
-                        // 1. Find heading for Zone Lockdown
-                        const allElements = Array.from(document.querySelectorAll('main h1, main h2, main h3, main h4, main h5, main [role="heading"], main [class*="heading"], main [class*="title"], main div, main span, h1, h2, h3, h4, h5, [role="heading"], div, span'));
-                        const headingKws = ['zone lockdown', 'zone lockdown rules', 'lockdown'];
-                        let h = null;
-                        for (const kw of headingKws) {
-                            h = allElements.find(el => {
-                                if (isInsideNav(el)) return false;
-                                if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-                                const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                                return (t === kw || t.startsWith(kw) || t.includes(kw)) && el.getBoundingClientRect().left > 150;
-                            });
-                            if (h) break;
-                        }
+                        const allSpans = Array.from(document.querySelectorAll('span, div, h2, h3, h4'));
+                        const zlSpan = allSpans.find(el => {
+                            if (isInsideNav(el)) return false;
+                            return (el.innerText || '').trim().toLowerCase() === 'zone lockdown rules' && el.getBoundingClientRect().left > 150;
+                        });
 
-                        // 2. Find card container or closest bounded box
                         let card = null;
-                        if (h) {
-                            let cur = h.parentElement;
+                        if (zlSpan) {
+                            let cur = zlSpan.parentElement;
                             while (cur && cur !== document.body && cur.tagName !== 'MAIN') {
-                                const s = window.getComputedStyle(cur);
-                                const ch = cur.offsetHeight;
-                                const cw = cur.offsetWidth;
-                                if ((s.borderWidth !== '0px' && s.borderStyle !== 'none') || cur.getAttribute('data-testid') || cur.className?.includes?.('card') || cur.className?.includes?.('section')) {
-                                    if (cw > 500 && ch < 1400) {
-                                        card = cur;
-                                        break;
-                                    }
+                                const text = (cur.innerText || '').trim().toLowerCase();
+                                if (text.includes('zone lockdown rules') && text.includes('create rule') && !text.includes('ip access rules')) {
+                                    card = cur;
                                 }
                                 cur = cur.parentElement;
                             }
-                            if (!card) {
-                                card = h.closest('.setting-card, [class*="card"], [data-sentry-element="Card"], section');
-                            }
                         }
 
-                        // 3. Find table
-                        let table = card ? card.querySelector('table, [role="table"]') : null;
-                        if (!table) {
-                            const tables = Array.from(document.querySelectorAll('table, [role="table"]')).filter(t => !isInsideNav(t) && t.offsetWidth > 0 && t.offsetHeight > 0);
-                            table = tables.find(t => {
-                                const txt = (t.innerText || t.textContent || '').toLowerCase();
-                                return txt.includes('url') || txt.includes('ip') || txt.includes('lockdown') || txt.includes('rule');
-                            }) || (tables.length > 1 ? tables[tables.length - 1] : tables[0]);
-                        }
-
-                        // 4. Find footer / pagination
-                        const searchRoot = card || (h ? h.parentElement : document);
-                        const cardFooters = Array.from(searchRoot.querySelectorAll('div, span, button, p, td, li, footer')).filter(el => !isInsideNav(el)).reverse();
-                        const footer = cardFooters.find(el => {
-                            if (el.offsetWidth === 0 || el.offsetHeight === 0) return false;
-                            const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-                            return (
-                                (t.includes(' of ') && /\d+\s*of\s*\d+/i.test(t)) ||
-                                t.startsWith('showing ') ||
-                                (t.includes(' of ') && (t.includes('1 -') || t.includes('1-') || t.includes('page '))) ||
-                                t.includes('records added') ||
-                                (t.includes('records') && /\d+/.test(t))
-                            );
-                        });
-
-                        const siteFooter = document.querySelector('#site-footer') || document.querySelector('footer');
                         const scrollY = window.scrollY || window.pageYOffset || 0;
-                        const hRect = h ? h.getBoundingClientRect() : null;
-                        const tableRect = table ? table.getBoundingClientRect() : null;
-                        const cardRect = card ? card.getBoundingClientRect() : null;
-                        const fRect = footer ? footer.getBoundingClientRect() : null;
-                        const sfRect = siteFooter ? siteFooter.getBoundingClientRect() : null;
+                        const rect = card ? card.getBoundingClientRect() : null;
 
-                        // Start Y: top of heading (or table or card top)
-                        let rawStartY = 400;
-                        if (hRect) {
-                            rawStartY = hRect.top;
-                        } else if (cardRect) {
-                            rawStartY = cardRect.top;
-                        } else if (tableRect) {
-                            rawStartY = tableRect.top - 40;
+                        let autoStartX = 320;
+                        let autoStartY = 2040;
+                        let autoWidth = 1350;
+                        let autoHeight = 265;
+
+                        if (rect) {
+                            autoStartX = Math.max(0, Math.round(rect.left) - 15);
+                            autoStartY = Math.max(0, Math.round(rect.top + scrollY) - 25);
+                            autoWidth = Math.min(1920 - autoStartX, Math.round(rect.width) + 30);
+                            autoHeight = Math.max(100, Math.round(rect.height) + 40);
                         }
-
-                        // End Y: footer, table bottom, card bottom, or above site footer
-                        let rawEndY = rawStartY + 450;
-                        if (fRect && fRect.bottom > rawStartY) {
-                            rawEndY = fRect.bottom + 25;
-                        } else if (tableRect && tableRect.bottom > rawStartY) {
-                            rawEndY = tableRect.bottom + 35;
-                        } else if (cardRect && cardRect.bottom > rawStartY && (cardRect.bottom - rawStartY) < 1200) {
-                            rawEndY = cardRect.bottom + 15;
-                        } else if (sfRect && sfRect.top > rawStartY) {
-                            rawEndY = sfRect.top - 15;
-                        }
-
-                        const startLeft = tableRect ? Math.min(tableRect.left, hRect ? hRect.left : 9999) : (hRect ? hRect.left : 300);
-                        const autoStartX = Math.max(0, Math.min(Math.round(window.innerWidth * 0.15), Math.round(startLeft) - 30));
-                        const autoStartY = Math.max(0, Math.round(rawStartY + scrollY) - 20);
-                        const autoWidth = 1350;
-                        const autoHeight = Math.max(150, Math.min(1200, Math.round(rawEndY - rawStartY + 40)));
 
                         const parsedXS = parseInt(qXS, 10);
                         const parsedXE = parseInt(qXE, 10);
