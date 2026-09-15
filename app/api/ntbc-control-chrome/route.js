@@ -27,8 +27,14 @@ export async function GET(request) {
             page = await browser.newPage();
         }
 
-        // Force viewport size to 1920x1080 to match browser window size inside VNC container
-        await page.setViewport({ width: 1920, height: 1080 });
+        // Clear any device metrics override to allow Chrome to naturally fill the full container window
+        try {
+            const client = await page.target().createCDPSession();
+            await client.send('Emulation.clearDeviceMetricsOverride');
+            await client.send('Emulation.resetPageScaleFactor');
+        } catch (emErr) {
+            console.error('Failed to clear device metrics override:', emErr);
+        }
 
         // Determine redirect target
         const customUrl = searchParams.get('url');

@@ -2033,11 +2033,16 @@ export async function GET(request) {
                 });
 
                 if (type !== 'domains') {
-                    // Restore viewport size to original window dimensions
-                    await page.setViewport({
-                        width: originalViewportSize.width,
-                        height: originalViewportSize.height
-                    });
+                    // Restore viewport size and clear emulation override so Chrome displays normally
+                    try {
+                        const client = await page.target().createCDPSession();
+                        await client.send('Emulation.clearDeviceMetricsOverride');
+                    } catch (e) {
+                        await page.setViewport({
+                            width: originalViewportSize.width,
+                            height: originalViewportSize.height
+                        });
+                    }
                 }
 
                 pageBuffer = Buffer.from(fullScreenshotBase64, 'base64');
@@ -2127,10 +2132,15 @@ export async function GET(request) {
                                             type: 'png'
                                         });
 
-                                        await page.setViewport({
-                                            width: originalViewportSize.width,
-                                            height: originalViewportSize.height
-                                        });
+                                        try {
+                                            const client = await page.target().createCDPSession();
+                                            await client.send('Emulation.clearDeviceMetricsOverride');
+                                        } catch (e) {
+                                            await page.setViewport({
+                                                width: originalViewportSize.width,
+                                                height: originalViewportSize.height
+                                            });
+                                        }
 
                                         const subFullBuffer = Buffer.from(subScreenshotBase64, 'base64');
                                         const subImage = sharp(subFullBuffer);
