@@ -38,9 +38,11 @@ services:
     environment:
       - DISPLAY_WIDTH=1920
       - DISPLAY_HEIGHT=1080
+      - CHROME_CUSTOM_ARGS=--window-size=1920,1080 --window-position=0,0 --start-maximized --no-first-run --force-device-scale-factor=1
     volumes:
       - ./chrome-config:/config
       - ./docker-chrome-policy:/etc/chromium/policies:ro
+      - ./docker-openbox/main-window-selection.xml:/etc/openbox/main-window-selection.xml:ro
     shm_size: 2gb
     security_opt:
       - seccomp:unconfined
