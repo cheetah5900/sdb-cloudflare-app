@@ -27,13 +27,11 @@ export async function GET(request) {
             page = await browser.newPage();
         }
 
-        // Clear any device metrics override to allow Chrome to naturally fill the full container window
+        // Set viewport to 1920x1080 to match full window and screen size exactly
         try {
-            const client = await page.target().createCDPSession();
-            await client.send('Emulation.clearDeviceMetricsOverride');
-            await client.send('Emulation.resetPageScaleFactor');
+            await page.setViewport({ width: 1920, height: 1080 });
         } catch (emErr) {
-            console.error('Failed to clear device metrics override:', emErr);
+            console.error('Failed to set 1920x1080 viewport:', emErr);
         }
 
         // Determine redirect target

@@ -1,0 +1,7 @@
+FROM maelp/docker-vnc-chromium:latest
+
+RUN apk add --no-cache xdotool
+
+RUN mkdir -p /etc/services.d/maximize-window
+COPY docker-chrome/maximize-daemon.sh /etc/services.d/maximize-window/run
+RUN chmod +x /etc/services.d/maximize-window/run
