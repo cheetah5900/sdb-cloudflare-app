@@ -389,8 +389,12 @@ export async function GET(request) {
             page = await browser.newPage();
         }
 
-        // Force viewport size to 1920x1080 to match browser window size inside VNC container
-        await page.setViewport({ width: 1920, height: 1080 });
+        // Clear any device metrics override to keep native resolution
+        try {
+            const client = await page.target().createCDPSession();
+            await client.send('Emulation.clearDeviceMetricsOverride');
+            await client.send('Emulation.resetPageScaleFactor');
+        } catch (e) {}
 
         // Reset zoom to 100% via keyboard shortcut Ctrl+0
         try {
@@ -1854,61 +1858,17 @@ export async function GET(request) {
                     };
                 });
 
-                if (type !== 'domains') {
-                    console.log(`Temporarily resizing viewport height from ${originalViewportSize.height} to ${originalViewportSize.documentHeight} for full page capture...`);
-                    await page.setViewport({
-                        width: originalViewportSize.width,
-                        height: originalViewportSize.documentHeight
-                    });
-                }
-
-                await page.evaluate(() => {
-                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
-                        document.activeElement.blur();
-                    }
-                    const id = 'cf-no-highlight-fix';
-                    let style = document.getElementById(id);
-                    if (!style) {
-                        style = document.createElement('style');
-                        style.id = id;
-                        document.head.appendChild(style);
-                    }
-                    style.innerHTML = `
-                        mark, 
-                        [class*="highlight"], 
-                        [class*="Highlight"], 
-                        [data-sentry-component="Highlight"],
-                        [data-testid*="highlight"],
-                        mark * {
-                            background-color: transparent !important;
-                            background: transparent !important;
-                            color: inherit !important;
-                            box-shadow: none !important;
-                            border: none !important;
-                            padding: 0 !important;
-                            text-decoration: none !important;
-                        }
-                    `;
-                });
-
-                console.log('Capturing page screenshot (flicker-free)...');
+                console.log('Capturing page screenshot (full page, flicker-free)...');
                 const fullScreenshotBase64 = await page.screenshot({
                     encoding: 'base64',
-                    type: 'png'
+                    type: 'png',
+                    fullPage: true
                 });
 
-                if (type !== 'domains') {
-                    // Restore viewport size and clear emulation override so Chrome displays normally
-                    try {
-                        const client = await page.target().createCDPSession();
-                        await client.send('Emulation.clearDeviceMetricsOverride');
-                    } catch (e) {
-                        await page.setViewport({
-                            width: originalViewportSize.width,
-                            height: originalViewportSize.height
-                        });
-                    }
-                }
+                try {
+                    const client = await page.target().createCDPSession();
+                    await client.send('Emulation.clearDeviceMetricsOverride');
+                } catch (e) {}
 
                 pageBuffer = Buffer.from(fullScreenshotBase64, 'base64');
 
@@ -1986,26 +1946,17 @@ export async function GET(request) {
                                             );
                                         });
 
-                                        await page.setViewport({
-                                            width: originalViewportSize.width,
-                                            height: tempDocHeight
-                                        });
-
                                         console.log(`Capturing ${tabInfo.text} page screenshot...`);
                                         const subScreenshotBase64 = await page.screenshot({
                                             encoding: 'base64',
-                                            type: 'png'
+                                            type: 'png',
+                                            fullPage: true
                                         });
 
                                         try {
                                             const client = await page.target().createCDPSession();
                                             await client.send('Emulation.clearDeviceMetricsOverride');
-                                        } catch (e) {
-                                            await page.setViewport({
-                                                width: originalViewportSize.width,
-                                                height: originalViewportSize.height
-                                            });
-                                        }
+                                        } catch (e) {}
 
                                         const subFullBuffer = Buffer.from(subScreenshotBase64, 'base64');
                                         const subImage = sharp(subFullBuffer);
