@@ -626,7 +626,12 @@ export default function ControlPage() {
 
 
     const getCaptureUrl = (typeKey, typeValue) => {
+        const targetDomain = zones.find(z => z.id === envZone)?.name || (typeKey === 'domains' ? 'overview' : null);
         let url = `/api/ntbc-capture?type=${typeValue}`;
+        if (envAccount) url += `&account=${encodeURIComponent(envAccount)}`;
+        if (targetDomain && targetDomain !== 'overview') {
+            url += `&zone=${encodeURIComponent(targetDomain)}&domain=${encodeURIComponent(targetDomain)}&siteName=${encodeURIComponent(targetDomain)}`;
+        }
         const c = coords[typeKey];
         if (c) {
             if (c.xStart) url += `&xStart=${c.xStart}`;

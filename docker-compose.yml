@@ -31,7 +31,9 @@ services:
       - chrome-browser
 
   chrome-browser:
-    image: maelp/docker-vnc-chromium:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.chrome
     container_name: sdb-chrome-browser
     ports:
       - "5800:5800"

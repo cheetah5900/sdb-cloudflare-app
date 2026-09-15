@@ -476,7 +476,7 @@ export async function GET(request) {
         // 2. Intelligent URL Auto-Routing for Target Subpath
         try {
             const queryAcc = searchParams.get('account') || searchParams.get('accountId');
-            const queryZone = searchParams.get('zone') || searchParams.get('domain');
+            const queryZone = searchParams.get('zone') || searchParams.get('domain') || searchParams.get('siteName');
 
             const currentUrl = page.url();
             const urlMatch = currentUrl.match(/dash\.cloudflare\.com\/([a-zA-Z0-9._-]+)(?:\/([a-zA-Z0-9._-]+))?/i);
