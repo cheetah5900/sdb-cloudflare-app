@@ -1827,6 +1827,173 @@ export default function ControlPage() {
             if (!targetDomain && tabId !== 'domains') {
                 throw new Error('ไม่พบข้อมูลโดเมน (Zone) กรุณาเลือก Zone ใน Active Environment Settings');
             }
+
+            // Dedicated Speed Test Execution Workflow
+            if (tabId === 'speed') {
+                addLog('🚀 เริ่มต้นกระบวนการรัน Speed Test และตรวจจับสถานะแบบละเอียด...', 'info');
+                const targetSpeedUrl = `https://dash.cloudflare.com/${envAccount}/${targetDomain}/speed/test/browser`;
+                
+                addLog(`กำลังเชื่อมต่อไปยังหน้า Speed Test: ${targetSpeedUrl}`, 'info');
+                const navRes = await fetch(`/api/ntbc-control-chrome?url=${encodeURIComponent(targetSpeedUrl)}`);
+                const navData = await navRes.json();
+                if (!navData.success) throw new Error(navData.error);
+                
+                addLog('รอหน้าเว็บ Speed Test โหลดข้อมูลและองค์ประกอบให้พร้อม...', 'info');
+                await new Promise(r => setTimeout(r, DELAY_CONFIG.NAV_STABILIZE_MS));
+
+                // Trigger Speed Test
+                addLog(`กดปุ่มเริ่มการทดสอบความเร็ว (Run Test) สำหรับโดเมน ${targetDomain}...`, 'info');
+                const runRes = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'run-speed-test',
+                        domainVal: targetDomain,
+                        apiToken: currentUser?.cloudflare_api_token
+                    })
+                });
+                const runData = await runRes.json();
+
+                if (!runData.success) {
+                    if (runData.errorType === 'quota_exceeded') {
+                        addLog(`⚠️ ${runData.error}`, 'warn');
+                    } else {
+                        addLog(`⚠️ แจ้งเตือนจาก Cloudflare: ${runData.error || runData.message}`, 'warn');
+                    }
+                } else {
+                    addLog('✅ เริ่มการทดสอบความเร็วสำเร็จ กำลังรอผลประมวลผลจาก Cloudflare...', 'success');
+                }
+
+                // Polling Loop with Error Detection (Max 30 attempts x 3s = 90s)
+                const maxAttempts = 30;
+                let completedState = null;
+                let lastError = null;
+
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    addLog(`⏳ กำลังตรวจสอบผลการทดสอบความเร็ว (รอบที่ ${attempt}/${maxAttempts})...`, 'info');
+                    const checkRes = await fetch('/api/scrape', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'check-speed-results',
+                            domainVal: targetDomain,
+                            apiToken: currentUser?.cloudflare_api_token
+                        })
+                    });
+                    const checkData = await checkRes.json();
+
+                    if (checkData.success && checkData.status === 'completed') {
+                        completedState = checkData;
+                        addLog(`🎉 ผลการทดสอบความเร็วเสร็จสมบูรณ์! (คะแนน: ${checkData.score || 'พร้อมแสดงผล'})`, 'success');
+                        break;
+                    }
+
+                    if (checkData.status === 'error') {
+                        lastError = checkData;
+                        addLog(`❌ Cloudflare ตรวจพบข้อผิดพลาด: ${checkData.error || 'Test Failed'}`, 'error');
+
+                        // If previous valid result exists in history, load it
+                        if (checkData.hasPreviousResult && checkData.previousResultUrl) {
+                            addLog(`ℹ️ กำลังโหลดผลการทดสอบที่สมบูรณ์ล่าสุดในประวัติ (คะแนน ${checkData.previousScore || ''})...`, 'warn');
+                            await fetch('/api/scrape', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    action: 'view-previous-speed-result',
+                                    resultUrl: checkData.previousResultUrl
+                                })
+                            });
+                            completedState = { status: 'completed', score: checkData.previousScore, isPrevious: true };
+                            break;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    await new Promise(r => setTimeout(r, 3000));
+                }
+
+                // Capture Desktop and Mobile screenshots
+                addLog('📸 กำลังจับภาพหน้าจอผลการทดสอบความเร็ว Desktop...', 'info');
+                const captureDesktopRes = await fetch(getCaptureUrl('speed', 'speed'));
+                const captureDesktopData = await captureDesktopRes.json();
+
+                let desktopImg = null;
+                if (captureDesktopData.success && captureDesktopData.image) {
+                    desktopImg = captureDesktopData.image;
+                    setCapturedSpeedScreenshot(desktopImg);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('control_capturedSpeedScreenshot', desktopImg);
+                    }
+                    addLog('✅ บันทึกภาพ Speed Test (Desktop) เรียบร้อย', 'success');
+                }
+
+                // Switch to Mobile and Capture Mobile
+                if (desktopImg) {
+                    addLog('📱 กำลังสลับไปยังแท็บ Mobile Speed Test...', 'info');
+                    const mobileRes = await fetch('/api/scrape', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'click-speed-mobile',
+                            apiToken: currentUser?.cloudflare_api_token
+                        })
+                    });
+                    const mobileData = await mobileRes.json();
+
+                    if (mobileData.success) {
+                        addLog('📸 กำลังจับภาพหน้าจอผลการทดสอบความเร็ว Mobile...', 'info');
+                        const captureMobileRes = await fetch(getCaptureUrl('speedMobile', 'speed-mobile'));
+                        const captureMobileData = await captureMobileRes.json();
+
+                        if (captureMobileData.success && captureMobileData.image) {
+                            setCapturedSpeedMobileScreenshot(captureMobileData.image);
+                            if (typeof window !== 'undefined') {
+                                localStorage.setItem('control_capturedSpeedMobileScreenshot', captureMobileData.image);
+                            }
+                            addLog('✅ บันทึกภาพ Speed Test (Mobile) เรียบร้อย', 'success');
+                        }
+                    }
+                }
+
+                // Record capture metadata
+                const uName = currentUser?.username || auth.getCurrentUser()?.username || 'root';
+                const nowIso = new Date().toISOString();
+                setCaptureMeta(prev => {
+                    const next = {
+                        ...prev,
+                        speed: { capturedAt: nowIso, capturedBy: uName }
+                    };
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('control_captureMeta', JSON.stringify(next));
+                    }
+                    return next;
+                });
+
+                if (!isSilent) {
+                    if (lastError && !completedState?.isPrevious && !desktopImg) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Speed Test Error',
+                            text: lastError.error || 'การทดสอบความเร็วล้มเหลว',
+                            background: '#111827',
+                            color: '#fff'
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Captured Speed Test!',
+                            text: `บันทึกภาพผลการทดสอบความเร็วเรียบร้อย ${completedState?.score ? `(คะแนน: ${completedState.score})` : ''}`,
+                            timer: 2000,
+                            showConfirmButton: false,
+                            background: '#111827',
+                            color: '#fff'
+                        });
+                    }
+                }
+                return true;
+            }
+
             let targetUrl = null;
             if (relativePath === 'domains' || relativePath === '/domains/overview') {
                 targetUrl = `https://dash.cloudflare.com/${envAccount}/domains/overview`;
@@ -2370,7 +2537,20 @@ export default function ControlPage() {
                                         ipAccess: { label: 'IP Access Rules', img: capturedIpAccessScreenshot, type: 'ip-access-rules', path: '/security/security-rules', setter: setCapturedIpAccessScreenshot, key: 'control_capturedIpAccessScreenshot' },
                                         zoneLockdown: { label: 'Zone Lockdown Rules', img: capturedZoneLockdownScreenshot, type: 'zone-lockdown', path: '/security/security-rules', setter: setCapturedZoneLockdownScreenshot, key: 'control_capturedZoneLockdownScreenshot' },
                                         argo: { label: 'Argo Smart Routing', img: capturedArgoScreenshot, type: 'argo', path: '/traffic', setter: setCapturedArgoScreenshot, key: 'control_capturedArgoScreenshot' },
-                                        speed: { label: 'Speed Test Results', img: capturedSpeedScreenshot, type: 'speed', path: '/speed/test/browser', setter: setCapturedSpeedScreenshot, key: 'control_capturedSpeedScreenshot' }
+                                        speed: { 
+                                            label: 'Speed Test Results (Desktop & Mobile)', 
+                                            img: (capturedSpeedScreenshot || capturedSpeedMobileScreenshot) 
+                                                ? [
+                                                    ...(capturedSpeedScreenshot ? [{ label: '🖥️ Desktop Test Result', src: capturedSpeedScreenshot }] : []),
+                                                    ...(capturedSpeedMobileScreenshot ? [{ label: '📱 Mobile Test Result', src: capturedSpeedMobileScreenshot }] : [])
+                                                  ]
+                                                : null, 
+                                            type: 'speed', 
+                                            path: '/speed/test/browser', 
+                                            setter: setCapturedSpeedScreenshot, 
+                                            key: 'control_capturedSpeedScreenshot',
+                                            isSpeedDual: true
+                                        }
                                     };
 
                                     const current = tabMap[activeCaptureTab];
@@ -2396,13 +2576,31 @@ export default function ControlPage() {
 
                                             {/* Screenshot Preview (Multi-image in 2 columns, single image centered) */}
                                             {current.img ? (
-                                                current.isArray && Array.isArray(current.img) ? (
+                                                current.isSpeedDual && Array.isArray(current.img) ? (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        {current.img.map((item, idx) => (
+                                                            <div key={idx} className="flex flex-col gap-1.5">
+                                                                <span className="text-[11px] font-bold text-rose-300 flex items-center gap-1">
+                                                                    {item.label}
+                                                                </span>
+                                                                <div className="rounded-xl border border-gray-800/80 bg-black flex items-center justify-center p-2 overflow-hidden group relative">
+                                                                    <img src={item.src} className="max-w-full rounded h-auto max-h-[360px] object-contain transition-transform group-hover:scale-[1.02] duration-300" alt={item.label} />
+                                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                                                                        <button type="button" onClick={() => openImageInNewTab(item.src)} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
+                                                                            View Full Image
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : current.isArray && Array.isArray(current.img) ? (
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                         {current.img.map((imgSrc, idx) => (
                                                             <div key={idx} className="rounded-xl border border-gray-800/80 bg-black flex items-center justify-center p-2 overflow-hidden group relative">
                                                                 <img src={imgSrc} className="max-w-full rounded h-auto max-h-[360px] object-contain transition-transform group-hover:scale-[1.02] duration-300" alt={`${current.label} - Page ${idx + 1}`} />
                                                                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-                                                                    <button type="button" onClick={() => openImageInNewTab(imgSrc)} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors">
+                                                                    <button type="button" onClick={() => openImageInNewTab(imgSrc)} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
                                                                         View Full Image
                                                                     </button>
                                                                 </div>
@@ -2413,7 +2611,7 @@ export default function ControlPage() {
                                                     <div className="rounded-xl border border-gray-800/80 bg-black flex items-center justify-center p-2 overflow-hidden group relative">
                                                         <img src={current.img} className="max-w-full rounded h-auto max-h-[380px] object-contain transition-transform group-hover:scale-[1.02] duration-300" alt={current.label} />
                                                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
-                                                            <button type="button" onClick={() => openImageInNewTab(current.img)} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors">
+                                                            <button type="button" onClick={() => openImageInNewTab(current.img)} className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer">
                                                                 View Full Image
                                                             </button>
                                                         </div>

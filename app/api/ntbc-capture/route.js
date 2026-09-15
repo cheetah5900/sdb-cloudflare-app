@@ -545,6 +545,11 @@ export async function GET(request) {
                     
                     const curPath = curObj.pathname.toLowerCase().replace(/\/+$/, '');
                     const tgtPath = tgtObj.pathname.toLowerCase().replace(/\/+$/, '');
+
+                    // For speed tests, any subpath within /speed/test/ or /speed is considered the target section
+                    if ((type === 'speed' || type === 'speed-mobile') && (curPath.includes('/speed/test') || curPath.includes('/speed'))) {
+                        return true;
+                    }
                     
                     const pathMatches = (curPath === tgtPath) || 
                                         curPath.endsWith(tgtPath.replace(/^\/[a-f0-9]+/, '')) ||
@@ -557,6 +562,7 @@ export async function GET(request) {
                 } catch {
                     const cleanCur = (cur || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
                     const cleanTgt = (tgt || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
+                    if ((type === 'speed' || type === 'speed-mobile') && cleanCur.includes('/speed')) return true;
                     return cleanCur === cleanTgt || cleanCur.endsWith(cleanTgt);
                 }
             };
@@ -1373,7 +1379,12 @@ export async function GET(request) {
                 }
 
                 let autoStartX;
-                if (captureType === 'domains') {
+                const isSpeedResultPage = (captureType === 'speed' || captureType === 'speed-mobile') && 
+                    (window.location.href.includes('/tests/') || (document.body && document.body.innerText.includes('Speed test result')));
+
+                if (isSpeedResultPage) {
+                    autoStartX = 480;
+                } else if (captureType === 'domains') {
                     autoStartX = Math.round(window.innerWidth * 0.18) + 50;
                 } else if (captureType === 'dns') {
                     autoStartX = Math.round(window.innerWidth * 0.19);
@@ -1397,7 +1408,9 @@ export async function GET(request) {
                     : autoStartX;
 
                 let autoEndX;
-                if (captureType === 'domains') {
+                if (isSpeedResultPage) {
+                    autoEndX = 1660;
+                } else if (captureType === 'domains') {
                     autoEndX = Math.round(window.innerWidth * 0.93);
                 } else if (captureType === 'dns') {
                     autoEndX = Math.round(window.innerWidth * 0.96);
@@ -1420,7 +1433,7 @@ export async function GET(request) {
                     ? ((parsedXE > 500) ? parsedXE : Math.min(window.innerWidth, autoEndX + parsedXE))
                     : autoEndX;
 
-                const headingAnchorY = Math.max(0, Math.round(headingTop - 20));
+                const headingAnchorY = isSpeedResultPage ? 70 : Math.max(0, Math.round(headingTop - 20));
                 const parsedYS = parseInt(qYS, 10);
                 const startY = !isNaN(parsedYS)
                     ? ((parsedYS > 500) ? parsedYS : Math.max(0, headingAnchorY + parsedYS))
@@ -1428,7 +1441,9 @@ export async function GET(request) {
 
                 let autoHeight;
                 const isDynamic = ['domains', 'dns', 'security-rules', 'rate-limiting', 'managed-rules', 'ip-access-rules', 'zone-lockdown', 'ssl-overview', 'ssl-edge', 'top-events-source'].includes(captureType);
-                if (isDynamic) {
+                if (isSpeedResultPage) {
+                    autoHeight = 820;
+                } else if (isDynamic) {
                     autoHeight = Math.max(100, (absoluteBottom - startY) + 20);
                 } else if (captureType === 'traffic' || captureType === 'traffic-countries') {
                     autoHeight = 900;
