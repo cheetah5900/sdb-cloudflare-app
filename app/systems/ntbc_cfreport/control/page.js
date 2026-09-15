@@ -1971,20 +1971,36 @@ export default function ControlPage() {
                 });
 
                 if (!isSilent) {
-                    if (lastError && !completedState?.isPrevious && !desktopImg) {
+                    if (lastError && completedState?.isPrevious) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'การทดสอบรอบล่าสุดเกิดข้อผิดพลาด',
+                            html: `<div class="text-left text-xs space-y-2">
+                                <p class="text-rose-400 font-bold">❌ ข้อความจาก Cloudflare: ${lastError.error}</p>
+                                <p class="text-emerald-400 font-medium">💡 ระบบได้ตรวจจับและดึงผลการทดสอบที่สมบูรณ์ล่าสุดในประวัติ (คะแนน <strong>${completedState.score || ''}</strong>) มาบันทึกภาพให้เรียบร้อยแล้ว</p>
+                            </div>`,
+                            background: '#111827',
+                            color: '#fff',
+                            confirmButtonColor: '#e11d48'
+                        });
+                    } else if (lastError && !desktopImg) {
                         Swal.fire({
                             icon: 'error',
-                            title: 'Speed Test Error',
-                            text: lastError.error || 'การทดสอบความเร็วล้มเหลว',
+                            title: 'Speed Test Failed',
+                            html: `<div class="text-left text-xs space-y-2">
+                                <p class="text-rose-400 font-bold">❌ สาเหตุ: ${lastError.error || 'การทดสอบความเร็วล้มเหลว'}</p>
+                                <p class="text-gray-300">ระบบได้ตรวจพบข้อผิดพลาดจาก Cloudflare และบันทึกภาพแจ้งเตือนข้อผิดพลาดไว้ในระบบเรียบร้อยแล้ว</p>
+                            </div>`,
                             background: '#111827',
-                            color: '#fff'
+                            color: '#fff',
+                            confirmButtonColor: '#e11d48'
                         });
                     } else {
                         Swal.fire({
                             icon: 'success',
                             title: 'Captured Speed Test!',
                             text: `บันทึกภาพผลการทดสอบความเร็วเรียบร้อย ${completedState?.score ? `(คะแนน: ${completedState.score})` : ''}`,
-                            timer: 2000,
+                            timer: 2200,
                             showConfirmButton: false,
                             background: '#111827',
                             color: '#fff'

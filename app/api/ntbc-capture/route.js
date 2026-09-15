@@ -696,6 +696,43 @@ export async function GET(request) {
             }
         }
 
+        // Check if Speed Test page is showing "Test failed"
+        if (type === 'speed' || type === 'speed-mobile') {
+            const speedStatus = await page.evaluate(() => {
+                const text = document.body ? document.body.innerText : '';
+                if (text.includes('Test failed') || text.toLowerCase().includes("couldn't run the speed test") || text.includes('was redirected to a different domain')) {
+                    let failDetail = 'การทดสอบความเร็วล้มเหลว (Test Failed)';
+                    const failMsgMatch = text.match(/Test failed[\s\S]*?(?=Run daily test|Run test once|Run test on target url|$)/i);
+                    if (failMsgMatch) {
+                        failDetail = failMsgMatch[0].replace(/\n+/g, ' ').trim();
+                    }
+                    return { isFailed: true, message: failDetail };
+                }
+                return { isFailed: false };
+            });
+
+            if (speedStatus.isFailed) {
+                console.log(`⚠️ Speed Test reported Failed on screen: ${speedStatus.message}`);
+                const title = type === 'speed-mobile' ? '📱 Mobile Speed Test Failed' : '🚀 Speed Test Failed';
+                const placeholderBuffer = await generateUnavailableImage(title, speedStatus.message);
+                const fileName = FILE_MAPPING[type] || `captured-${type}.png`;
+                const filePath = path.join(publicDir, fileName);
+                fs.writeFileSync(filePath, placeholderBuffer);
+                try { fs.writeFileSync(path.join(dbCapturedDir, fileName), placeholderBuffer); } catch (e) {}
+
+                await browser.disconnect();
+
+                return Response.json({
+                    success: true,
+                    image: `data:image/png;base64,${placeholderBuffer.toString('base64')}`,
+                    filePath: `/${fileName}?t=${Date.now()}`,
+                    isUnavailable: true,
+                    unavailableTitle: title,
+                    unavailableMessage: speedStatus.message
+                });
+            }
+        }
+
         let pageIndex = 1;
         let hasNextPage = true;
         const pageBuffers = [];

@@ -2792,6 +2792,50 @@ export async function POST(request) {
                 return { status: 'waiting', message: 'รอผลการทดสอบ...' };
             }, domainVal);
 
+            // If test failed on result page, check overview table for previous successful results
+            if (state.status === 'error' && state.errorType === 'test_failed' && state.isResultPage) {
+                try {
+                    console.log('Test failed on result page. Checking overview table for previous successful results...');
+                    const currentUrl = page.url();
+                    const urlMatch = currentUrl.match(/dash\.cloudflare\.com\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)/i);
+                    if (urlMatch) {
+                        const acc = urlMatch[1];
+                        const zone = urlMatch[2];
+                        const overviewUrl = `https://dash.cloudflare.com/${acc}/${zone}/speed/test/browser`;
+                        
+                        await page.goto(overviewUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+                        await new Promise(r => setTimeout(r, 1500));
+                        
+                        const tableLookup = await page.evaluate(() => {
+                            const testedRows = Array.from(document.querySelectorAll('table tbody tr')).map(row => {
+                                const text = row.innerText || '';
+                                const link = row.querySelector('a[href*="/tests/"]');
+                                return {
+                                    text,
+                                    url: link ? link.href : null,
+                                    hasFailed: text.toLowerCase().includes('failed'),
+                                    scoreMatch: text.match(/\b(\d{1,3})\b/)
+                                };
+                            });
+                            const prevValid = testedRows.find(r => r.scoreMatch && !r.hasFailed && r.url);
+                            return {
+                                hasPreviousResult: !!prevValid,
+                                previousResultUrl: prevValid ? prevValid.url : null,
+                                previousScore: prevValid ? prevValid.scoreMatch[1] : null
+                            };
+                        });
+                        
+                        if (tableLookup.hasPreviousResult) {
+                            state.hasPreviousResult = true;
+                            state.previousResultUrl = tableLookup.previousResultUrl;
+                            state.previousScore = tableLookup.previousScore;
+                        }
+                    }
+                } catch (lookupErr) {
+                    console.warn('Could not check overview table for previous results:', lookupErr.message);
+                }
+            }
+
             // If found completed test in overview table, auto-navigate to the detailed result page
             if (state.status === 'completed_in_table' && state.resultUrl) {
                 console.log(`Auto-navigating to completed Speed Test result: ${state.resultUrl}`);
