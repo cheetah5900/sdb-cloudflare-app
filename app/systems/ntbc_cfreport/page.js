@@ -5071,8 +5071,9 @@ export default function NTBCCFReportPage() {
     const processSingleZoneCapture = async (activeZoneId, activeAccountId, selectedHosts, batchStartDate, batchEndDate, templateId = 'default', promotedHosts = [], exportSeparated = false, currentIndex = 0, totalZones = 1) => {
         let isCancelled = false;
         let isFinished = false;
+        let userForcedStop = false;
         const checkCancelled = () => {
-            if (isCancelled) {
+            if (isCancelled || userForcedStop) {
                 throw new Error('Force stopped by user');
             }
         };
@@ -5200,6 +5201,10 @@ export default function NTBCCFReportPage() {
             title: totalZones > 1 ? `Generating Report... (${currentIndex + 1}/${totalZones}) [${domainName}]` : 'Generating Report & Capturing Screenshots...',
             html: renderHtml(),
             width: '1200px',
+            toast: false,
+            position: 'center',
+            timer: null,
+            timerProgressBar: false,
             allowOutsideClick: false,
             allowEscapeKey: false,
             showConfirmButton: false,
@@ -5208,13 +5213,14 @@ export default function NTBCCFReportPage() {
                 const btn = Swal.getHtmlContainer()?.querySelector('#force-stop-btn');
                 if (btn) {
                     btn.onclick = () => {
+                        userForcedStop = true;
                         isCancelled = true;
                         Swal.close();
                     };
                 }
             },
             didClose: () => {
-                if (!isFinished) {
+                if (!isFinished && userForcedStop) {
                     isCancelled = true;
                 }
             },
@@ -5223,7 +5229,7 @@ export default function NTBCCFReportPage() {
         });
 
         const updateProgress = () => {
-            if (isCancelled) return;
+            if (isCancelled || userForcedStop) return;
             Swal.update({
                 title: totalZones > 1 ? `Generating Report... (${currentIndex + 1}/${totalZones}) [${domainName}]` : 'Generating Report & Capturing Screenshots...',
                 html: renderHtml()
@@ -5231,6 +5237,7 @@ export default function NTBCCFReportPage() {
             const btn = Swal.getHtmlContainer()?.querySelector('#force-stop-btn');
             if (btn) {
                 btn.onclick = () => {
+                    userForcedStop = true;
                     isCancelled = true;
                     Swal.close();
                 };

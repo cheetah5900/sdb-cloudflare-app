@@ -40,18 +40,28 @@ const customSwal = {
         // String shorthand: Swal.fire('Title', 'Message', 'icon')
         if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'string') {
             const [title, text, icon] = args;
-            return Toast.fire({
-                icon: icon || 'info',
+            return Swal.fire({
                 title,
-                text
+                text,
+                icon: icon || 'info',
+                background: '#111827',
+                color: '#f3f4f6',
+                customClass: {
+                    popup: 'rounded-2xl border border-gray-800 shadow-2xl'
+                }
             });
         }
 
         // Single string: Swal.fire('Message')
         if (args.length === 1 && typeof args[0] === 'string') {
-            return Toast.fire({
+            return Swal.fire({
+                title: args[0],
                 icon: 'info',
-                title: args[0]
+                background: '#111827',
+                color: '#f3f4f6',
+                customClass: {
+                    popup: 'rounded-2xl border border-gray-800 shadow-2xl'
+                }
             });
         }
 
@@ -59,28 +69,26 @@ const customSwal = {
         if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
             const options = args[0];
 
-            // If it's a confirmation / prompt requiring user interaction
-            if (options.showCancelButton || options.input || options.position === 'center' || (typeof options.html === 'string' && options.html.includes('<input'))) {
-                return Swal.fire({
-                    position: options.position || 'center',
-                    background: '#111827',
-                    color: '#f3f4f6',
-                    customClass: {
-                        popup: 'rounded-2xl border border-gray-800 shadow-2xl',
-                        ...options.customClass
-                    },
-                    ...options
+            if (options.toast === true) {
+                return Toast.fire({
+                    ...options,
+                    toast: true,
+                    position: options.position || 'top-end',
+                    showConfirmButton: options.showConfirmButton ?? false,
+                    timer: options.timer ?? 3000,
+                    timerProgressBar: options.timerProgressBar ?? true
                 });
             }
 
-            // Normal notification/alert -> ALWAYS Top-Right Toast
-            return Toast.fire({
-                ...options,
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: options.showConfirmButton ?? false,
-                timer: options.timer ?? 3000,
-                timerProgressBar: options.timerProgressBar ?? true
+            return Swal.fire({
+                position: options.position || 'center',
+                background: '#111827',
+                color: '#f3f4f6',
+                customClass: {
+                    popup: 'rounded-2xl border border-gray-800 shadow-2xl',
+                    ...options.customClass
+                },
+                ...options
             });
         }
 
@@ -88,7 +96,13 @@ const customSwal = {
     },
     showValidationMessage: (...args) => Swal.showValidationMessage(...args),
     close: (...args) => Swal.close(...args),
-    isVisible: (...args) => Swal.isVisible(...args)
+    isVisible: (...args) => Swal.isVisible(...args),
+    showLoading: (...args) => Swal.showLoading(...args),
+    hideLoading: (...args) => Swal.hideLoading(...args),
+    update: (...args) => Swal.update(...args),
+    getHtmlContainer: (...args) => Swal.getHtmlContainer(...args),
+    getTitle: (...args) => Swal.getTitle(...args),
+    getPopup: (...args) => Swal.getPopup(...args)
 };
 
 export default customSwal;
