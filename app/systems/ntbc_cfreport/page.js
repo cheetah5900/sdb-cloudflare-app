@@ -6046,8 +6046,13 @@ export default function NTBCCFReportPage() {
         Swal.fire({
             title: 'Generating Report...',
             html: 'Please wait while we capture the dashboard and generate your report.<br/><span class="text-sm text-gray-400">Do not close this window.</span>',
+            position: 'center',
+            toast: false,
+            timer: null,
+            timerProgressBar: false,
             allowOutsideClick: false,
             allowEscapeKey: false,
+            showConfirmButton: false,
             didOpen: () => {
                 Swal.showLoading();
             },
