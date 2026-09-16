@@ -16,6 +16,15 @@ import { auth } from '@/app/utils/auth';
 import { getUserProfileAction } from '@/app/actions/authActions';
 import SearchableDropdown from '../SearchableDropdown';
 
+const safeSetItem = (key, val) => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(key, val);
+    } catch (e) {
+        console.warn(`[safeSetItem] Storage quota exceeded or unavailable for key "${key}":`, e.message);
+    }
+};
+
 export default function ControlPage() {
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
@@ -1276,7 +1285,7 @@ export default function ControlPage() {
                         if (captureData.success && captureData.image) {
                             domainsImg = captureData.image;
                             setCapturedScreenshot(domainsImg);
-                            localStorage.setItem('control_capturedScreenshot', domainsImg);
+                            safeSetItem('control_capturedScreenshot', domainsImg);
                             addLog('Domains screenshot captured successfully.', 'success');
                         } else {
                             addLog(`Domains capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1306,7 +1315,7 @@ export default function ControlPage() {
                             const dnsImages = (captureData.dnsPages && captureData.dnsPages.length > 0) ? captureData.dnsPages : [captureData.image];
                             dnsImg = dnsImages;
                             setCapturedDnsScreenshot(dnsImages);
-                            localStorage.setItem('control_capturedDnsScreenshot', JSON.stringify(dnsImages));
+                            safeSetItem('control_capturedDnsScreenshot', JSON.stringify(dnsImages));
                             addLog('DNS records screenshot captured successfully.', 'success');
                         } else {
                             addLog(`DNS records capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1343,26 +1352,26 @@ export default function ControlPage() {
                         if (captureData.success && captureData.image) {
                             trafficImg = captureData.image;
                             setCapturedHttpTrafficScreenshot(trafficImg);
-                            localStorage.setItem('control_capturedHttpTrafficScreenshot', trafficImg);
+                            safeSetItem('control_capturedHttpTrafficScreenshot', trafficImg);
                             if (captureData.imageSub1) {
                                 setCapturedHttpTrafficScreenshot1(captureData.imageSub1);
-                                localStorage.setItem('control_capturedHttpTrafficScreenshot1', captureData.imageSub1);
+                                safeSetItem('control_capturedHttpTrafficScreenshot1', captureData.imageSub1);
                             }
                             if (captureData.imageSub2) {
                                 setCapturedHttpTrafficScreenshot2(captureData.imageSub2);
-                                localStorage.setItem('control_capturedHttpTrafficScreenshot2', captureData.imageSub2);
+                                safeSetItem('control_capturedHttpTrafficScreenshot2', captureData.imageSub2);
                             }
                             if (captureData.imageSub3) {
                                 setCapturedHttpTrafficScreenshot3(captureData.imageSub3);
-                                localStorage.setItem('control_capturedHttpTrafficScreenshot3', captureData.imageSub3);
+                                safeSetItem('control_capturedHttpTrafficScreenshot3', captureData.imageSub3);
                             }
                             if (captureData.imageSub4) {
                                 setCapturedHttpTrafficScreenshot4(captureData.imageSub4);
-                                localStorage.setItem('control_capturedHttpTrafficScreenshot4', captureData.imageSub4);
+                                safeSetItem('control_capturedHttpTrafficScreenshot4', captureData.imageSub4);
                             }
                             if (captureData.imageSub5) {
                                 setCapturedHttpTrafficScreenshot5(captureData.imageSub5);
-                                localStorage.setItem('control_capturedHttpTrafficScreenshot5', captureData.imageSub5);
+                                safeSetItem('control_capturedHttpTrafficScreenshot5', captureData.imageSub5);
                             }
                             addLog('HTTP Traffic screenshots captured successfully.', 'success');
                         } else {
@@ -1392,7 +1401,7 @@ export default function ControlPage() {
                         if (captureData.success && captureData.image) {
                             firewallImg = captureData.image;
                             setCapturedFirewallScreenshot(firewallImg);
-                            localStorage.setItem('control_capturedFirewallScreenshot', firewallImg);
+                            safeSetItem('control_capturedFirewallScreenshot', firewallImg);
                             addLog('Event Analytics (Firewall) screenshot captured successfully.', 'success');
                         } else {
                             addLog(`Event Analytics (Firewall) capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1421,7 +1430,7 @@ export default function ControlPage() {
                         if (captureData.success && captureData.image) {
                             securityRulesImg = captureData.image;
                             setCapturedSecurityRulesScreenshot(securityRulesImg);
-                            localStorage.setItem('control_capturedSecurityRulesScreenshot', securityRulesImg);
+                            safeSetItem('control_capturedSecurityRulesScreenshot', securityRulesImg);
                             addLog('Security Rules screenshot captured successfully.', 'success');
                         } else {
                             addLog(`Security Rules capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1450,7 +1459,7 @@ export default function ControlPage() {
                         if (captureData.success && captureData.image) {
                             argoImg = captureData.image;
                             setCapturedArgoScreenshot(argoImg);
-                            localStorage.setItem('control_capturedArgoScreenshot', argoImg);
+                            safeSetItem('control_capturedArgoScreenshot', argoImg);
                             addLog('Argo Smart Routing screenshot captured successfully.', 'success');
                         } else {
                             addLog(`Argo Smart Routing capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1518,7 +1527,7 @@ export default function ControlPage() {
                                 if (captureData.success && captureData.image) {
                                     speedImg = captureData.image;
                                     setCapturedSpeedScreenshot(speedImg);
-                                    localStorage.setItem('control_capturedSpeedScreenshot', speedImg);
+                                    safeSetItem('control_capturedSpeedScreenshot', speedImg);
                                     addLog('Speed Test screenshot captured successfully.', 'success');
                                 } else {
                                     addLog(`Speed Test capture failed: ${captureData.error || 'Failed to capture screenshot'}`, 'warn');
@@ -1530,7 +1539,7 @@ export default function ControlPage() {
                                 if (captureData.success && captureData.image) {
                                     speedImg = captureData.image;
                                     setCapturedSpeedScreenshot(speedImg);
-                                    localStorage.setItem('control_capturedSpeedScreenshot', speedImg);
+                                    safeSetItem('control_capturedSpeedScreenshot', speedImg);
                                     addLog('Speed Test fallback screenshot captured successfully.', 'success');
                                 }
                             }
@@ -1560,7 +1569,7 @@ export default function ControlPage() {
                                     if (captureMobileData.success && captureMobileData.image) {
                                         speedMobileImg = captureMobileData.image;
                                         setCapturedSpeedMobileScreenshot(speedMobileImg);
-                                        localStorage.setItem('control_capturedSpeedMobileScreenshot', speedMobileImg);
+                                        safeSetItem('control_capturedSpeedMobileScreenshot', speedMobileImg);
                                         addLog('Mobile Speed Test screenshot captured successfully.', 'success');
                                     } else {
                                         addLog(`Mobile Speed Test capture failed: ${captureMobileData.error || 'Failed to capture screenshot'}`, 'warn');

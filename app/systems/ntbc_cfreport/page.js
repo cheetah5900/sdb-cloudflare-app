@@ -312,6 +312,15 @@ const getZoneName = (zoneId, zones = []) => {
     return '-';
 };
 
+const safeSetItem = (key, val) => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(key, val);
+    } catch (e) {
+        console.warn(`[safeSetItem] Storage quota exceeded or unavailable for key "${key}":`, e.message);
+    }
+};
+
 
 // --- TEMPLATE PROCESSING ---
 // Helper to escape special regex characters
@@ -5458,7 +5467,7 @@ export default function NTBCCFReportPage() {
                         if (captureData.success && captureData.image) {
                             setCapturedDomainImage(captureData.image);
                             capturedImagesMap.domains = captureData.image;
-                            localStorage.setItem('control_capturedScreenshot', captureData.image);
+                            safeSetItem('control_capturedScreenshot', captureData.image);
                             statusMap.domains = 'success';
                         } else {
                             statusMap.domains = 'warn';
@@ -5481,13 +5490,13 @@ export default function NTBCCFReportPage() {
                 );
                 if (dnsData) {
                     setCapturedDnsImage(dnsData.image);
-                    localStorage.setItem('control_capturedDnsScreenshot', dnsData.image);
+                    safeSetItem('control_capturedDnsScreenshot', dnsData.image);
                     if (dnsData.dnsPages) {
                         setCapturedDnsPages(dnsData.dnsPages);
-                        localStorage.setItem('control_capturedDnsPages', JSON.stringify(dnsData.dnsPages));
+                        safeSetItem('control_capturedDnsPages', JSON.stringify(dnsData.dnsPages));
                     } else {
                         setCapturedDnsPages([]);
-                        localStorage.removeItem('control_capturedDnsPages');
+                        try { localStorage.removeItem('control_capturedDnsPages'); } catch (_) {}
                     }
                 }
 
@@ -5499,7 +5508,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (botData) {
                     setCapturedBotManagementImage(botData.image);
-                    localStorage.setItem('control_capturedBotManagementScreenshot', botData.image);
+                    safeSetItem('control_capturedBotManagementScreenshot', botData.image);
                 }
                 const secLevelData = await controlAndCapture(
                     `https://dash.cloudflare.com/${activeAccountId}/${domainName}/security/settings`,
@@ -5508,7 +5517,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (secLevelData) {
                     setCapturedSecurityLevelImage(secLevelData.image);
-                    localStorage.setItem('control_capturedSecurityLevelScreenshot', secLevelData.image);
+                    safeSetItem('control_capturedSecurityLevelScreenshot', secLevelData.image);
                 }
 
                 // Step 5: SSL/TLS Overview
@@ -5519,7 +5528,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (sslOverviewData) {
                     setCapturedSslOverviewImage(sslOverviewData.image);
-                    localStorage.setItem('control_capturedSslOverviewScreenshot', sslOverviewData.image);
+                    safeSetItem('control_capturedSslOverviewScreenshot', sslOverviewData.image);
                 }
 
                 // Step 6: SSL/TLS Edge Certificates (Min TLS & TLS 1.3)
@@ -5530,7 +5539,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (sslEdgeData) {
                     setCapturedSslEdgeImage(sslEdgeData.image);
-                    localStorage.setItem('control_capturedSslEdgeScreenshot', sslEdgeData.image);
+                    safeSetItem('control_capturedSslEdgeScreenshot', sslEdgeData.image);
                 }
 
                 // Step 7: HTTP Traffic
@@ -5547,26 +5556,26 @@ export default function NTBCCFReportPage() {
                 );
                 if (trafficData) {
                     setCapturedTrafficImage(trafficData.image);
-                    localStorage.setItem('control_capturedHttpTrafficScreenshot', trafficData.image);
+                    safeSetItem('control_capturedHttpTrafficScreenshot', trafficData.image);
                     if (trafficData.imageSub1) {
                         setCapturedTrafficImageSub1(trafficData.imageSub1);
-                        localStorage.setItem('control_capturedHttpTrafficScreenshot1', trafficData.imageSub1);
+                        safeSetItem('control_capturedHttpTrafficScreenshot1', trafficData.imageSub1);
                     }
                     if (trafficData.imageSub2) {
                         setCapturedTrafficImageSub2(trafficData.imageSub2);
-                        localStorage.setItem('control_capturedHttpTrafficScreenshot2', trafficData.imageSub2);
+                        safeSetItem('control_capturedHttpTrafficScreenshot2', trafficData.imageSub2);
                     }
                     if (trafficData.imageSub3) {
                         setCapturedTrafficImageSub3(trafficData.imageSub3);
-                        localStorage.setItem('control_capturedHttpTrafficScreenshot3', trafficData.imageSub3);
+                        safeSetItem('control_capturedHttpTrafficScreenshot3', trafficData.imageSub3);
                     }
                     if (trafficData.imageSub4) {
                         setCapturedTrafficImageSub4(trafficData.imageSub4);
-                        localStorage.setItem('control_capturedHttpTrafficScreenshot4', trafficData.imageSub4);
+                        safeSetItem('control_capturedHttpTrafficScreenshot4', trafficData.imageSub4);
                     }
                     if (trafficData.imageSub5) {
                         setCapturedTrafficImageSub5(trafficData.imageSub5);
-                        localStorage.setItem('control_capturedHttpTrafficScreenshot5', trafficData.imageSub5);
+                        safeSetItem('control_capturedHttpTrafficScreenshot5', trafficData.imageSub5);
                     }
                 }
 
@@ -5578,7 +5587,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (trafficCountriesData) {
                     setCapturedTrafficCountriesImage(trafficCountriesData.image);
-                    localStorage.setItem('control_capturedTrafficCountriesScreenshot', trafficCountriesData.image);
+                    safeSetItem('control_capturedTrafficCountriesScreenshot', trafficCountriesData.image);
                 }
 
                 // Step 9: Firewall Events
@@ -5589,7 +5598,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (firewallData) {
                     setCapturedFirewallImage(firewallData.image);
-                    localStorage.setItem('control_capturedFirewallScreenshot', firewallData.image);
+                    safeSetItem('control_capturedFirewallScreenshot', firewallData.image);
                 }
 
                 // Step 10: Top Events by Source
@@ -5600,7 +5609,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (topEventsData) {
                     setCapturedTopEventsSourceImage(topEventsData.image);
-                    localStorage.setItem('control_capturedTopEventsSourceScreenshot', topEventsData.image);
+                    safeSetItem('control_capturedTopEventsSourceScreenshot', topEventsData.image);
                 }
 
                 // Step 11: Security Rules (Custom Rules)
@@ -5611,7 +5620,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (rulesData) {
                     setCapturedSecurityRulesImage(rulesData.image);
-                    localStorage.setItem('control_capturedSecurityRulesScreenshot', rulesData.image);
+                    safeSetItem('control_capturedSecurityRulesScreenshot', rulesData.image);
                 }
 
                 // Step 12: Rate Limiting Rules
@@ -5622,7 +5631,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (rateLimitData) {
                     setCapturedRateLimitingImage(rateLimitData.image);
-                    localStorage.setItem('control_capturedRateLimitingScreenshot', rateLimitData.image);
+                    safeSetItem('control_capturedRateLimitingScreenshot', rateLimitData.image);
                 }
 
                 // Step 13: Managed Rules
@@ -5633,7 +5642,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (managedRulesData) {
                     setCapturedManagedRulesImage(managedRulesData.image);
-                    localStorage.setItem('control_capturedManagedRulesScreenshot', managedRulesData.image);
+                    safeSetItem('control_capturedManagedRulesScreenshot', managedRulesData.image);
                 }
 
                 // Step 14: IP Access Rules
@@ -5644,7 +5653,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (ipAccessData) {
                     setCapturedIpAccessImage(ipAccessData.image);
-                    localStorage.setItem('control_capturedIpAccessScreenshot', ipAccessData.image);
+                    safeSetItem('control_capturedIpAccessScreenshot', ipAccessData.image);
                 }
 
                 // Step 15: Zone Lockdown
@@ -5655,7 +5664,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (zoneLockdownData) {
                     setCapturedZoneLockdownImage(zoneLockdownData.image);
-                    localStorage.setItem('control_capturedZoneLockdownScreenshot', zoneLockdownData.image);
+                    safeSetItem('control_capturedZoneLockdownScreenshot', zoneLockdownData.image);
                 }
 
                 // Step 16: Argo Routing
@@ -5666,7 +5675,7 @@ export default function NTBCCFReportPage() {
                 );
                 if (argoData) {
                     setCapturedArgoImage(argoData.image);
-                    localStorage.setItem('control_capturedArgoScreenshot', argoData.image);
+                    safeSetItem('control_capturedArgoScreenshot', argoData.image);
                 }
 
                 // Step 8: Speed Test Desktop + Mobile
@@ -5712,6 +5721,7 @@ export default function NTBCCFReportPage() {
                                     })
                                 });
                                 const checkData = await checkRes.json();
+                                checkCancelled();
                                 if (checkData.success && checkData.found) {
                                     isSuccess = true;
                                     break;
@@ -5732,7 +5742,7 @@ export default function NTBCCFReportPage() {
                                 desktopSpeedImg = captureData.image;
                                 capturedImagesMap.speed = captureData.image;
                                 setCapturedSpeedImage(captureData.image);
-                                localStorage.setItem('control_capturedSpeedScreenshot', captureData.image);
+                                safeSetItem('control_capturedSpeedScreenshot', captureData.image);
                             }
 
                             // Capture Speed Mobile
@@ -5754,7 +5764,7 @@ export default function NTBCCFReportPage() {
                                     if (captureMobileData.success && captureMobileData.image) {
                                         capturedImagesMap.speedMobile = captureMobileData.image;
                                         setCapturedSpeedMobileImage(captureMobileData.image);
-                                        localStorage.setItem('control_capturedSpeedMobileScreenshot', captureMobileData.image);
+                                        safeSetItem('control_capturedSpeedMobileScreenshot', captureMobileData.image);
                                         statusMap.speedMobile = 'success';
                                     }
                                 }
@@ -5769,7 +5779,7 @@ export default function NTBCCFReportPage() {
                             if (captureData.success && captureData.image) {
                                 capturedImagesMap.speed = captureData.image;
                                 setCapturedSpeedImage(captureData.image);
-                                localStorage.setItem('control_capturedSpeedScreenshot', captureData.image);
+                                safeSetItem('control_capturedSpeedScreenshot', captureData.image);
                                 statusMap.speed = 'success';
                             } else {
                                 statusMap.speed = 'warn';
