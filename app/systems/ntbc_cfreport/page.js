@@ -5134,6 +5134,63 @@ export default function NTBCCFReportPage() {
         };
 
         const errorMap = {};
+        const capturedImagesMap = {};
+
+        const showImageLightbox = (imgSrc, title) => {
+            if (!imgSrc) return;
+            let overlay = document.getElementById('ntbc-live-image-lightbox');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'ntbc-live-image-lightbox';
+                document.body.appendChild(overlay);
+            }
+            overlay.style.cssText = 'position: fixed; inset: 0; z-index: 2147483647; background: rgba(0,0,0,0.88); backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;';
+            overlay.innerHTML = `
+                <div style="max-width: 92vw; max-height: 92vh; width: 1000px; background: #111827; border: 1px solid #374151; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #374151; background: #1f2937;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 16px;">📸</span>
+                            <span style="font-weight: bold; color: #f3f4f6; font-size: 14px;">รูปภาพที่แคป: ${title || 'Screenshot'}</span>
+                        </div>
+                        <button id="close-lightbox-btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; font-size: 12px; cursor: pointer; padding: 5px 12px; border-radius: 6px; font-weight: bold;">✕ ปิดหน้าต่าง</button>
+                    </div>
+                    <div style="padding: 16px; overflow: auto; display: flex; align-items: center; justify-content: center; background: #030712; max-height: calc(92vh - 65px);">
+                        <img src="${imgSrc}" style="max-width: 100%; max-height: calc(92vh - 100px); object-fit: contain; border-radius: 6px; border: 1px solid #1f2937; box-shadow: 0 10px 25px rgba(0,0,0,0.5);" alt="Captured Preview" />
+                    </div>
+                </div>
+            `;
+            const closeBtn = overlay.querySelector('#close-lightbox-btn');
+            if (closeBtn) closeBtn.onclick = () => { overlay.style.display = 'none'; };
+            overlay.onclick = (e) => {
+                if (e.target === overlay) overlay.style.display = 'none';
+            };
+        };
+
+        const attachLiveListeners = () => {
+            const container = Swal.getHtmlContainer();
+            if (!container) return;
+            const previewBtns = container.querySelectorAll('.preview-captured-step-btn');
+            previewBtns.forEach(btn => {
+                btn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const key = btn.getAttribute('data-img-key');
+                    const title = btn.getAttribute('data-img-title') || key;
+                    const img = capturedImagesMap[key];
+                    if (img) {
+                        showImageLightbox(img, title);
+                    }
+                };
+            });
+            const forceStopBtn = container.querySelector('#force-stop-btn');
+            if (forceStopBtn) {
+                forceStopBtn.onclick = () => {
+                    userForcedStop = true;
+                    isCancelled = true;
+                    Swal.close();
+                };
+            }
+        };
 
         const renderHtml = () => {
             const getIcon = (status) => {
@@ -5147,7 +5204,14 @@ export default function NTBCCFReportPage() {
             const renderLine = (statusKey, text) => {
                 const icon = getIcon(statusMap[statusKey]);
                 const errMsg = errorMap[statusKey] ? `<div style="color: #ef4444; font-size: 11px; margin-left: 24px; margin-top: -6px; margin-bottom: 8px; line-height: 1.2; word-break: break-word;">${errorMap[statusKey]}</div>` : '';
-                return `<div style="margin-bottom: ${errMsg ? '2px' : '6px'}; font-size: 13px;">${icon} ${text}</div>${errMsg}`;
+                const hasImg = !!capturedImagesMap[statusKey];
+                const viewBtn = hasImg 
+                    ? `<button type="button" class="preview-captured-step-btn" data-img-key="${statusKey}" data-img-title="${text}" style="margin-left: 8px; padding: 2px 8px; font-size: 10px; font-weight: bold; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 4px; cursor: pointer; transition: all 0.2s;">👁️ ดูภาพ</button>`
+                    : '';
+                return `<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: ${errMsg ? '2px' : '6px'}; font-size: 13px;">
+                    <div style="display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${icon} <span style="overflow: hidden; text-overflow: ellipsis;">${text}</span></div>
+                    ${viewBtn}
+                </div>${errMsg}`;
             };
 
             return `
@@ -5185,6 +5249,7 @@ export default function NTBCCFReportPage() {
                         ${renderLine('zoneLockdown', 'Capture Zone Lockdown')}
                         ${renderLine('argo', 'Capture Argo Routing')}
                         ${renderLine('speed', 'Capture Speed Test')}
+                        ${renderLine('speedMobile', 'Capture Speed Test Mobile')}
                         ${renderLine('stats', 'Fetch CF Statistics')}
                         ${renderLine('report', 'Generate & Download Report')}
                         <div style="text-align: left; margin-top: 10px;">
@@ -5210,14 +5275,7 @@ export default function NTBCCFReportPage() {
             showConfirmButton: false,
             didOpen: () => {
                 Swal.showLoading();
-                const btn = Swal.getHtmlContainer()?.querySelector('#force-stop-btn');
-                if (btn) {
-                    btn.onclick = () => {
-                        userForcedStop = true;
-                        isCancelled = true;
-                        Swal.close();
-                    };
-                }
+                attachLiveListeners();
             },
             didClose: () => {
                 if (!isFinished && userForcedStop) {
@@ -5234,14 +5292,7 @@ export default function NTBCCFReportPage() {
                 title: totalZones > 1 ? `Generating Report... (${currentIndex + 1}/${totalZones}) [${domainName}]` : 'Generating Report & Capturing Screenshots...',
                 html: renderHtml()
             });
-            const btn = Swal.getHtmlContainer()?.querySelector('#force-stop-btn');
-            if (btn) {
-                btn.onclick = () => {
-                    userForcedStop = true;
-                    isCancelled = true;
-                    Swal.close();
-                };
-            }
+            attachLiveListeners();
         };
 
         try {
@@ -5355,6 +5406,7 @@ export default function NTBCCFReportPage() {
                             }
                             if (captureData.success && captureData.image) {
                                 statusMap[statusKey] = 'success';
+                                capturedImagesMap[statusKey] = captureData.image;
                                 updateProgress();
                                 return captureData;
                             } else {
@@ -5400,6 +5452,7 @@ export default function NTBCCFReportPage() {
                         }
                         if (captureData.success && captureData.image) {
                             setCapturedDomainImage(captureData.image);
+                            capturedImagesMap.domains = captureData.image;
                             localStorage.setItem('control_capturedScreenshot', captureData.image);
                             statusMap.domains = 'success';
                         } else {
@@ -5672,6 +5725,7 @@ export default function NTBCCFReportPage() {
                             let desktopSpeedImg = null;
                             if (captureData.success && captureData.image) {
                                 desktopSpeedImg = captureData.image;
+                                capturedImagesMap.speed = captureData.image;
                                 setCapturedSpeedImage(captureData.image);
                                 localStorage.setItem('control_capturedSpeedScreenshot', captureData.image);
                             }
@@ -5693,8 +5747,10 @@ export default function NTBCCFReportPage() {
                                     const captureMobileRes = await fetch(`/api/ntbc-capture?type=speed-mobile${getCoordParams('speed-mobile')}`);
                                     const captureMobileData = await captureMobileRes.json();
                                     if (captureMobileData.success && captureMobileData.image) {
+                                        capturedImagesMap.speedMobile = captureMobileData.image;
                                         setCapturedSpeedMobileImage(captureMobileData.image);
                                         localStorage.setItem('control_capturedSpeedMobileScreenshot', captureMobileData.image);
+                                        statusMap.speedMobile = 'success';
                                     }
                                 }
                             }
@@ -5706,6 +5762,7 @@ export default function NTBCCFReportPage() {
                             const captureRes = await fetch(`/api/ntbc-capture?type=speed${getCoordParams('speed')}`);
                             const captureData = await captureRes.json();
                             if (captureData.success && captureData.image) {
+                                capturedImagesMap.speed = captureData.image;
                                 setCapturedSpeedImage(captureData.image);
                                 localStorage.setItem('control_capturedSpeedScreenshot', captureData.image);
                                 statusMap.speed = 'success';

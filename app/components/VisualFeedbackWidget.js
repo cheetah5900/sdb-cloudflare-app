@@ -66,8 +66,8 @@ export default function VisualFeedbackWidget() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [isInspectActive]);
 
   // Handle Mouse Over & Click during Inspect Mode
@@ -75,18 +75,19 @@ export default function VisualFeedbackWidget() {
     if (!isInspectActive || selectedEl) return;
 
     const handleMouseOver = (e) => {
-      if (e.target.closest('[data-feedback-widget="true"]')) {
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('[data-feedback-widget="true"]')) {
         setHoveredEl(null);
         return;
       }
       setHoveredEl(e.target);
     };
 
-    const handleClick = (e) => {
-      if (e.target.closest('[data-feedback-widget="true"]')) return;
+    const handleClickCapture = (e) => {
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('[data-feedback-widget="true"]')) return;
 
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
 
       const el = e.target;
       setSelectedEl(el);
@@ -94,8 +95,8 @@ export default function VisualFeedbackWidget() {
 
       const tagName = el.tagName ? el.tagName.toLowerCase() : 'element';
       const textContent = (el.innerText || el.textContent || '').trim().slice(0, 100);
-      const testId = el.getAttribute('data-testid') || el.getAttribute('id') || '';
-      const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+      const testId = (typeof el.getAttribute === 'function' && (el.getAttribute('data-testid') || el.getAttribute('id'))) || '';
+      const ariaLabel = (typeof el.getAttribute === 'function' && (el.getAttribute('aria-label') || el.getAttribute('title'))) || '';
       const classList = Array.from(el.classList || []).slice(0, 4).join(' ');
 
       let selector = tagName;
@@ -117,11 +118,15 @@ export default function VisualFeedbackWidget() {
     };
 
     document.addEventListener('mouseover', handleMouseOver, true);
-    document.addEventListener('click', handleClick, true);
+    document.addEventListener('pointerdown', handleClickCapture, true);
+    document.addEventListener('mousedown', handleClickCapture, true);
+    document.addEventListener('click', handleClickCapture, true);
 
     return () => {
       document.removeEventListener('mouseover', handleMouseOver, true);
-      document.removeEventListener('click', handleClick, true);
+      document.removeEventListener('pointerdown', handleClickCapture, true);
+      document.removeEventListener('mousedown', handleClickCapture, true);
+      document.removeEventListener('click', handleClickCapture, true);
     };
   }, [isInspectActive, selectedEl]);
 
@@ -136,6 +141,7 @@ export default function VisualFeedbackWidget() {
         left: `${rect.left}px`,
         width: `${rect.width}px`,
         height: `${rect.height}px`,
+        zIndex: 2147483645
       };
     } catch {
       overlayStyle = null;
@@ -203,7 +209,7 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
           ref={overlayRef}
           data-feedback-widget="true"
           style={overlayStyle}
-          className={`fixed pointer-events-none z-[99998] transition-all duration-75 rounded ${
+          className={`fixed pointer-events-none transition-all duration-75 rounded ${
             selectedEl 
               ? 'border-2 border-pink-500 bg-pink-500/20 shadow-[0_0_20px_rgba(236,72,153,0.5)] ring-4 ring-pink-500/30' 
               : 'border-2 border-indigo-400 bg-indigo-500/15 ring-2 ring-indigo-400/40 animate-pulse'
@@ -221,7 +227,8 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
       {isInspectActive && !selectedEl && (
         <div
           data-feedback-widget="true"
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] bg-slate-900/95 border-2 border-indigo-500 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-md animate-bounce font-sans text-xs font-bold"
+          style={{ zIndex: 2147483646 }}
+          className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-indigo-500 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-3 backdrop-blur-md animate-bounce font-sans text-xs font-bold"
         >
           <Crosshair className="w-4 h-4 text-indigo-400 animate-spin" />
           <span>โหมดชี้จุดแก้ไข: คลิกเลือกปุ่ม/ตาราง/ข้อความที่ต้องการแก้ได้เลย (หรือกด Esc เพื่อยกเลิก)</span>
@@ -238,7 +245,8 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
       {selectedEl && targetInfo && (
         <div
           data-feedback-widget="true"
-          className="fixed inset-0 z-[99999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 font-sans"
+          style={{ zIndex: 2147483647 }}
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 font-sans"
         >
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col text-slate-100">
             <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
@@ -351,7 +359,8 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
       {/* Floating Bottom-Right Trigger Button */}
       <div
         data-feedback-widget="true"
-        className="fixed bottom-5 right-5 z-[99990] flex items-center gap-2 font-sans select-none"
+        style={{ zIndex: 2147483647 }}
+        className="fixed bottom-5 right-5 flex items-center gap-2 font-sans select-none"
       >
         <button
           onClick={() => {
@@ -378,3 +387,4 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
     </>
   );
 }
+
