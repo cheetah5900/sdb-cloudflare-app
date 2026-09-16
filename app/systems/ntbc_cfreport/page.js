@@ -5231,27 +5231,27 @@ export default function NTBCCFReportPage() {
                         </div>
                     </div>
                     <div style="flex: 1.5; display: flex; flex-direction: column; justify-content: flex-start; border-left: 1px solid #374151; padding-left: 16px; max-height: 480px; overflow-y: auto;">
-                        ${renderLine('launch', 'Start debug browser')}
-                        ${renderLine('domains', 'Capture Domains Overview')}
-                        ${renderLine('dns', 'Capture DNS Records')}
-                        ${renderLine('bot', 'Capture Bot Management')}
-                        ${renderLine('securityLevel', 'Capture Security Level & BIC')}
-                        ${renderLine('sslOverview', 'Capture SSL/TLS Overview')}
-                        ${renderLine('sslEdge', 'Capture Min TLS & TLS 1.3')}
-                        ${renderLine('traffic', 'Capture HTTP Traffic')}
-                        ${renderLine('trafficCountries', 'Capture Traffic by Country')}
-                        ${renderLine('firewall', 'Capture Firewall Events')}
-                        ${renderLine('topEvents', 'Capture Top Events by Source')}
-                        ${renderLine('rules', 'Capture Security Rules')}
-                        ${renderLine('rateLimiting', 'Capture Rate Limiting Rules')}
-                        ${renderLine('managedRules', 'Capture Managed WAF Rules')}
-                        ${renderLine('ipAccess', 'Capture IP Access Rules')}
-                        ${renderLine('zoneLockdown', 'Capture Zone Lockdown')}
-                        ${renderLine('argo', 'Capture Argo Routing')}
-                        ${renderLine('speed', 'Capture Speed Test')}
-                        ${renderLine('speedMobile', 'Capture Speed Test Mobile')}
-                        ${renderLine('stats', 'Fetch CF Statistics')}
-                        ${renderLine('report', 'Generate & Download Report')}
+                        ${renderLine('launch', '1. Start debug browser')}
+                        ${renderLine('domains', '2. Capture Domains Overview')}
+                        ${renderLine('dns', '3. Capture DNS Records')}
+                        ${renderLine('bot', '4. Capture Bot Management')}
+                        ${renderLine('securityLevel', '5. Capture Security Level & BIC')}
+                        ${renderLine('sslOverview', '6. Capture SSL/TLS Overview')}
+                        ${renderLine('sslEdge', '7. Capture Min TLS & TLS 1.3')}
+                        ${renderLine('traffic', '8. Capture HTTP Traffic')}
+                        ${renderLine('trafficCountries', '9. Capture Traffic by Country')}
+                        ${renderLine('firewall', '10. Capture Firewall Events')}
+                        ${renderLine('topEvents', '11. Capture Top Events by Source')}
+                        ${renderLine('rules', '12. Capture Security Rules')}
+                        ${renderLine('rateLimiting', '13. Capture Rate Limiting Rules')}
+                        ${renderLine('managedRules', '14. Capture Managed WAF Rules')}
+                        ${renderLine('ipAccess', '15. Capture IP Access Rules')}
+                        ${renderLine('zoneLockdown', '16. Capture Zone Lockdown')}
+                        ${renderLine('argo', '17. Capture Argo Routing')}
+                        ${renderLine('speed', '18. Capture Speed Test')}
+                        ${renderLine('speedMobile', '19. Capture Speed Test Mobile')}
+                        ${renderLine('stats', '20. Fetch CF Statistics')}
+                        ${renderLine('report', '21. Generate & Download Report')}
                         <div style="text-align: left; margin-top: 10px;">
                             <button id="force-stop-btn" style="background-color: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; width: 100%;">
                                 Force Stop
