@@ -84,9 +84,7 @@ export async function GET(request) {
                 const curPath = curObj.pathname.toLowerCase().replace(/\/+$/, '');
                 const tgtPath = tgtObj.pathname.toLowerCase().replace(/\/+$/, '');
                 
-                const pathMatches = (curPath === tgtPath) || 
-                                    curPath.endsWith(tgtPath.replace(/^\/[a-f0-9]+/, '')) ||
-                                    tgtPath.endsWith(curPath.replace(/^\/[a-f0-9]+/, ''));
+                const pathMatches = (curPath === tgtPath);
                 
                 if (tgtObj.search && tgtObj.search.length > 1) {
                     return pathMatches && (curObj.search === tgtObj.search);
@@ -95,7 +93,7 @@ export async function GET(request) {
             } catch {
                 const cleanCur = (cur || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
                 const cleanTgt = (tgt || '').split('?')[0].split('#')[0].replace(/\/+$/, '').toLowerCase();
-                return cleanCur === cleanTgt || cleanCur.endsWith(cleanTgt);
+                return cleanCur === cleanTgt;
             }
         };
 

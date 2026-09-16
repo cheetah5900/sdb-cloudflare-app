@@ -5100,8 +5100,13 @@ export default function NTBCCFReportPage() {
             }
         }
 
-        const zoneObj = activeZones.find(z => z.id === activeZoneId);
-        const domainName = zoneObj ? zoneObj.name : '';
+        let domainName = getZoneName(activeZoneId, activeZones);
+        if (!domainName || domainName === '-') {
+            domainName = getZoneName(activeZoneId, zones);
+        }
+        if (!domainName || domainName === '-') {
+            domainName = (activeZoneId && activeZoneId.includes('.')) ? activeZoneId : '';
+        }
 
         if (!activeAccountId || !activeZoneId || !domainName) {
             Swal.fire('Error', 'Invalid Account or Zone configuration.', 'error');
