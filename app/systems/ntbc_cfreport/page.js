@@ -2814,7 +2814,7 @@ const BatchReportModal = ({ isOpen, onClose, hosts: dashboardHosts, onConfirm, t
                     {/* Right Column: Queue & Settings */}
                     <div className="space-y-4">
                         <div className={`p-3 ${t.selectorContainer} rounded-lg border ${t.modalBorder}`}>
-                            <label className={`block text-xs font-bold ${t.subText} uppercase tracking-wide mb-2`}>Settings</label>
+                            <label className={`block text-xs font-bold ${t.subText} uppercase tracking-wide mb-2`}>Template</label>
                             <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)} className={`mb-3 ${t.dropdown.bg} ${t.dropdown.border} border ${t.dropdown.inputText} rounded p-2.5 w-full text-sm outline-none`}>
                                 {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
