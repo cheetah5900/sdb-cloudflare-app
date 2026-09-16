@@ -5805,8 +5805,10 @@ export default function NTBCCFReportPage() {
                     title: 'Cancelled',
                     text: 'Report generation was stopped.',
                     icon: 'info',
-                    timer: 2000,
-                    showConfirmButton: false,
+                    position: 'center',
+                    showConfirmButton: true,
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#3b82f6',
                     background: theme?.modalBg || '#111827',
                     color: theme?.text || '#fff'
                 });
@@ -5819,6 +5821,10 @@ export default function NTBCCFReportPage() {
                 title: 'Workflow Failed',
                 text: error.message || 'An error occurred during report generation.',
                 icon: 'error',
+                position: 'center',
+                showConfirmButton: true,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#ef4444',
                 background: theme?.modalBg || '#111827',
                 color: theme?.text || '#fff'
             });
