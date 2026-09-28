@@ -201,6 +201,21 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
     setIsInspectActive(true);
   };
 
+  // Cmd+Enter (or Ctrl+Enter on Windows/Linux) copies the prompt while the feedback modal is open
+  useEffect(() => {
+    if (!selectedEl || !targetInfo) return;
+
+    const handleModalKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleCopyPrompt();
+      }
+    };
+
+    window.addEventListener('keydown', handleModalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleModalKeyDown, true);
+  }, [selectedEl, targetInfo, feedbackText]);
+
   return (
     <>
       {/* Highlight Box Overlay */}

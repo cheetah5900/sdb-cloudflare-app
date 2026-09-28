@@ -89,17 +89,17 @@ const SECTION_TARGETS = {
     },
     'zone-lockdown': {
         title: '🔐 Zone Lockdown Rules',
-        keywords: ['zone lockdown', 'lockdown rules', 'lockdown'],
+        keywords: ['zone lockdown', 'lockdown rules', 'lockdown', 'custom rules', 'waf'],
         description: 'ไม่พบเมนู Zone Lockdown Rules ในโดเมนนี้'
     },
     'ip-access-rules': {
         title: '🚫 IP Access Rules',
-        keywords: ['ip access rules', 'ip access', 'ip firewall'],
+        keywords: ['ip access rules', 'ip access', 'ip firewall', 'custom rules', 'waf'],
         description: 'ไม่พบเมนู IP Access Rules ในโดเมนนี้'
     },
     'ip-access': {
         title: '🚫 IP Access Rules',
-        keywords: ['ip access rules', 'ip access', 'ip firewall'],
+        keywords: ['ip access rules', 'ip access', 'ip firewall', 'custom rules', 'waf'],
         description: 'ไม่พบเมนู IP Access Rules ในโดเมนนี้'
     },
     'browser-integrity': {
@@ -521,9 +521,9 @@ export async function GET(request) {
                 'security-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/custom-rules`,
                 'rate-limiting': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/rate-limiting-rules`,
                 'managed-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/managed-rules`,
-                'ip-access-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/security-rules`,
-                'ip-access': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/security-rules`,
-                'zone-lockdown': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/security-rules`,
+                'ip-access-rules': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/custom-rules`,
+                'ip-access': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/custom-rules`,
+                'zone-lockdown': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/waf/custom-rules`,
                 'bot-management': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'security-level': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
                 'browser-integrity-check': (acc, zone) => `https://dash.cloudflare.com/${acc}/${zone}/security/settings`,
@@ -1317,9 +1317,9 @@ export async function GET(request) {
                     'security-rules': ['rules', 'custom rules', 'waf'],
                     'rate-limiting': ['rate limiting', 'rate limits', 'rules'],
                     'managed-rules': ['managed rules', 'managed', 'waf', 'rules'],
-                    'ip-access-rules': ['ip access', 'tools', 'firewall', 'rules'],
-                    'ip-access': ['ip access', 'tools', 'firewall', 'rules'],
-                    'zone-lockdown': ['zone lockdown', 'tools', 'lockdown', 'rules'],
+                    'ip-access-rules': ['custom rules', 'ip access', 'waf', 'tools', 'firewall', 'rules'],
+                    'ip-access': ['custom rules', 'ip access', 'waf', 'tools', 'firewall', 'rules'],
+                    'zone-lockdown': ['custom rules', 'zone lockdown', 'waf', 'tools', 'lockdown', 'rules'],
                     'bot-management': ['settings', 'bot'],
                     'security-level': ['settings', 'security'],
                     'ssl-overview': ['ssl', 'tls', 'encryption mode', 'overview'],
