@@ -352,6 +352,55 @@ function processTableOfContentsAndBreaks(html, useThaiDigits = true) {
         .replaceAll('@DAY@', thaiDay).replaceAll('@DAY', thaiDay)
         .replaceAll('@FULL_DATE@', thaiFullDate).replaceAll('@FULL_DATE', thaiFullDate);
 
+    // 4. Fallback captured screenshot images from db/captured/ if raw @captured_... placeholders are present
+    const capturedMap = {
+        '@captured_bot_management': 'captured-bot-management.png',
+        '@captured_security_level': 'captured-security-level.png',
+        '@captured_ssl_overview': 'captured-ssl-overview.png',
+        '@captured_ssl_edge': 'captured-ssl-edge.png',
+        '@captured_dns_page': 'captured-dns.png',
+        '@captured_dns_page_1': 'captured-dns-1.png',
+        '@captured_tls_1_3': 'captured-tls-1-3.png',
+        '@captured_load_balancing_spectrum': 'captured-load-balancing-spectrum.png',
+        '@captured_security_rules_page': 'captured-security-rules.png',
+        '@captured_rate_limiting_page': 'captured-rate-limiting.png',
+        '@captured_managed_rules_page': 'captured-managed-rules.png',
+        '@captured_ip_access_page': 'captured-ip-access.png',
+        '@captured_zone_lockdown_page': 'captured-zone-lockdown.png',
+        '@captured_traffic_page': 'captured-traffic.png',
+        '@captured_request_traffic_page': 'captured-traffic-sub1.png',
+        '@captured_data_transfer_traffic_page': 'captured-traffic-sub2.png',
+        '@captured_page_views_traffic_page': 'captured-traffic-sub3.png',
+        '@captured_visits_traffic_page': 'captured-traffic-sub4.png',
+        '@captured_api_requests_traffic_page': 'captured-traffic-sub5.png',
+        '@captured_traffic_countries_page': 'captured-traffic-countries.png',
+        '@captured_firewall_page': 'captured-firewall.png',
+        '@captured_top_events_source_page': 'captured-top-events-source.png',
+        '@captured_browser_integrity': 'captured-browser-integrity.png',
+        '@captured_min_tls_version': 'captured-min-tls-version.png',
+        '@captured_argo_page': 'captured-argo.png',
+        '@captured_speed_page': 'captured-speed.png',
+        '@captured_speed_mobile_page': 'captured-speed-mobile.png',
+        '@captured_domain_page': 'captured-domains.png'
+    };
+
+    const capturedDir = path.join(process.cwd(), 'db/captured');
+    for (const [tag, imgFileName] of Object.entries(capturedMap)) {
+        if (processedHtml.includes(tag)) {
+            const imgPath = path.join(capturedDir, imgFileName);
+            if (fsSync.existsSync(imgPath)) {
+                try {
+                    const imgBuffer = fsSync.readFileSync(imgPath);
+                    const base64Data = `data:image/png;base64,${imgBuffer.toString('base64')}`;
+                    const imgTag = `<div style="text-align: center; margin: 15px 0;"><img src="${base64Data}" alt="${imgFileName}" width="600" style="width: 600px; height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>`;
+                    processedHtml = processedHtml.replaceAll(tag + '@', imgTag).replaceAll(tag, imgTag);
+                } catch (e) {
+                    console.warn(`Failed to read fallback captured image ${imgPath}:`, e.message);
+                }
+            }
+        }
+    }
+
     return processedHtml;
 }
 
@@ -608,19 +657,25 @@ export async function POST(request) {
                     }
                 }
 
-                // 3) Fallback: search by basename directly in public folder (e.g. captured-dashboard.png)
+                // 3) Fallback: search by basename directly in public folder or db/captured folder (e.g. captured-bot-management.png)
                 let imgFile = decodedSrc;
                 if (imgFile.includes('?')) imgFile = imgFile.split('?')[0];
                 if (imgFile.includes('/')) imgFile = imgFile.substring(imgFile.lastIndexOf('/') + 1);
                 
-                const fallbackPath = pathNode.join(publicDir, imgFile);
-                try {
-                    if (fsNode.existsSync(fallbackPath)) {
-                        const imgBuffer = fsNode.readFileSync(fallbackPath);
-                        const mimeType = imgFile.endsWith('.png') ? 'image/png' : 'image/jpeg';
-                        return `data:${mimeType};base64,${imgBuffer.toString('base64')}`;
-                    }
-                } catch (e) {}
+                const fallbackPaths = [
+                    pathNode.join(publicDir, imgFile),
+                    pathNode.join(process.cwd(), 'db/captured', imgFile)
+                ];
+
+                for (const fallbackPath of fallbackPaths) {
+                    try {
+                        if (fsNode.existsSync(fallbackPath)) {
+                            const imgBuffer = fsNode.readFileSync(fallbackPath);
+                            const mimeType = imgFile.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                            return `data:${mimeType};base64,${imgBuffer.toString('base64')}`;
+                        }
+                    } catch (e) {}
+                }
 
                 return src;
             };
