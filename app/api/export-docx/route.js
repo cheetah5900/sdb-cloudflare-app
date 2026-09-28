@@ -339,6 +339,19 @@ function processTableOfContentsAndBreaks(html, useThaiDigits = true) {
         }
     }
 
+    // 3. Fallback date and time replacements if raw placeholders were sent
+    const now = new Date();
+    const thaiMonth = now.toLocaleString('th-TH', { month: 'long' });
+    const thaiYear = (now.getFullYear() + 543).toString();
+    const thaiDay = now.getDate().toString();
+    const thaiFullDate = now.toLocaleString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    processedHtml = processedHtml
+        .replaceAll('@MONTH@', thaiMonth).replaceAll('@MONTH', thaiMonth)
+        .replaceAll('@YEAR@', thaiYear).replaceAll('@YEAR', thaiYear)
+        .replaceAll('@DAY@', thaiDay).replaceAll('@DAY', thaiDay)
+        .replaceAll('@FULL_DATE@', thaiFullDate).replaceAll('@FULL_DATE', thaiFullDate);
+
     return processedHtml;
 }
 
