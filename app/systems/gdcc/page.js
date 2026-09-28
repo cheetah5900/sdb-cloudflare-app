@@ -562,6 +562,7 @@ const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null
         '@TOP_COUNTRY_VAL': safeData.topCountries && safeData.topCountries.length > 0 ? getCountryName(safeData.topCountries[0].name) : '-',
         '@TOP_HOST_VAL': safeData.topHosts && safeData.topHosts.length > 0 ? safeData.topHosts[0].host : '-',
         // Page Break for Word
+        '@PAGE_BREAK@': '<br clear="all" style="page-break-before:always" />',
         '@PAGE_BREAK': '<br clear="all" style="page-break-before:always" />',
         // Dashboard Screenshot Images
         '@DASHBOARD_IMAGE': (dashboardImage && typeof dashboardImage === 'string') ? `<img src="${dashboardImage}" alt="Dashboard Snapshot" width="${imageWidths['@DASHBOARD_IMAGE']}" style="height: auto; display: block; margin: 0 auto;" />` : (dashboardImage && dashboardImage.main) ? `<img src="${dashboardImage.main}" alt="Dashboard Snapshot" width="${imageWidths['@DASHBOARD_IMAGE']}" style="height: auto; display: block; margin: 0 auto;" />` : '',
@@ -1240,9 +1241,13 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
 
         if (isEditing) {
             let baseHtml = localTemplate;
-            if (useAutoTOC) {
+            baseHtml = baseHtml
+                .replaceAll('@PAGE_BREAK@', '<br clear="all" style="page-break-before:always" />')
+                .replaceAll('@PAGE_BREAK', '<br clear="all" style="page-break-before:always" />');
+            if (useAutoTOC || baseHtml.includes('@TOC@') || baseHtml.includes('@TOC')) {
                 baseHtml = addAutomaticTOC(baseHtml, true);
             }
+            baseHtml = baseHtml.replaceAll('@TOC@', '').replaceAll('@TOC', '');
             tempDiv.innerHTML = baseHtml;
         } else {
             let cloneHtml = getProcessedHtml(true); // Generates processed template with the black TOC at the correct @TOC@ placeholder location!

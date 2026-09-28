@@ -607,6 +607,7 @@ const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null
         '@TOP_COUNTRY_VAL': safeData.topCountries && safeData.topCountries.length > 0 ? getCountryName(safeData.topCountries[0].name) : '-',
         '@TOP_HOST_VAL': safeData.topHosts && safeData.topHosts.length > 0 ? safeData.topHosts[0].host : '-',
         // Page Break for Word
+        '@PAGE_BREAK@': '<br clear="all" style="page-break-before:always" />',
         '@PAGE_BREAK': '<br clear="all" style="page-break-before:always" />',
         // Dashboard Screenshot Image
         '@DASHBOARD_IMAGE': dashboardImage ? `<div class="mb-6" style="text-align: center;"><img src="${dashboardImage}" alt="Dashboard Snapshot" width="${imageWidths['@DASHBOARD_IMAGE']}" style="height: auto; display: block; margin: 0 auto;" /></div>` : '',
@@ -1613,9 +1614,13 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
         const tempDiv = document.createElement('div');
         if (isEditing) {
             let baseHtml = localTemplate;
-            if (useAutoTOC) {
+            baseHtml = baseHtml
+                .replaceAll('@PAGE_BREAK@', '<br clear="all" style="page-break-before:always" />')
+                .replaceAll('@PAGE_BREAK', '<br clear="all" style="page-break-before:always" />');
+            if (useAutoTOC || baseHtml.includes('@TOC@') || baseHtml.includes('@TOC')) {
                 baseHtml = addAutomaticTOC(baseHtml, true, useThaiDigits, useAutoTOC);
             }
+            baseHtml = baseHtml.replaceAll('@TOC@', '').replaceAll('@TOC', '');
             tempDiv.innerHTML = baseHtml;
         } else {
             let cloneHtml = getProcessedHtml(true); // Generates processed template with the black TOC at the correct @TOC@ placeholder location!

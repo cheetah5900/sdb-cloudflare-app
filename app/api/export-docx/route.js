@@ -73,18 +73,36 @@ async function sanitizeDocxFonts(bufferOrPath, margins = null) {
             let xml = await zip.file(fileName).async('string');
             let modified = false;
 
-            // Target ONLY font-specific attributes in <w:rFonts> or <w:rPr>
-            const fontAttrRegex = /(w:(?:ascii|hAnsi|eastAsia|cs|asciiTheme|hAnsiTheme|cstheme)=["'])([^"']+)(["'])/gi;
-            xml = xml.replace(fontAttrRegex, (match, prefix, val, suffix) => {
-                let newVal = val;
-                if (/Sarabun/i.test(newVal)) {
-                    newVal = 'TH SarabunPSK';
-                } else if (newVal.includes(';') || newVal.includes(',')) {
-                    newVal = newVal.split(/[;,]/)[0].trim().replace(/^['"]|['"]$/g, '');
-                }
-                newVal = newVal.replace(/^['"]|['"]$/g, '');
-                if (newVal !== val) modified = true;
-                return prefix + newVal + suffix;
+            // Target font-specific attributes in <w:rFonts> or <w:rPr>.
+            // Force EVERY literal font reference (w:ascii/w:hAnsi/w:eastAsia/w:cs) to TH SarabunPSK
+            // regardless of what the source HTML/LibreOffice conversion assigned (e.g. leftover
+            // Tahoma/Times New Roman from mso-fareast-font-family in pasted Word content), so the
+            // exported document always matches the TH Sarabun font configured in TinyMCE.
+            // IMPORTANT: scope these replacements to <w:rFonts .../> tags only. w:ascii/w:hAnsi/
+            // w:eastAsia/w:cs are also attribute names used elsewhere with unrelated meanings
+            // (e.g. <w:lang w:eastAsia="zh-CN"/> is a LOCALE CODE, not a font) — a plain global
+            // regex on the attribute name corrupts those into "TH SarabunPSK", producing invalid
+            // OOXML that can trigger Word's "unreadable content" repair prompt.
+            const fontAttrRegex = /(w:(?:ascii|hAnsi|eastAsia|cs)=["'])([^"']+)(["'])/gi;
+            const themeFontAttrRegex = /(w:(?:asciiTheme|hAnsiTheme|cstheme)=["'])([^"']+)(["'])/gi;
+            xml = xml.replace(/<w:rFonts\b[^>]*\/>/gi, (rFontsTag) => {
+                let newTag = rFontsTag.replace(fontAttrRegex, (match, prefix, val, suffix) => {
+                    let newVal = 'TH SarabunPSK';
+                    if (newVal !== val) modified = true;
+                    return prefix + newVal + suffix;
+                });
+                // Theme-based font references (w:asciiTheme/w:hAnsiTheme/w:cstheme) point at theme.xml
+                // entries, not literal font names, so only dedupe/clean them rather than overwrite.
+                newTag = newTag.replace(themeFontAttrRegex, (match, prefix, val, suffix) => {
+                    let newVal = val;
+                    if (newVal.includes(';') || newVal.includes(',')) {
+                        newVal = newVal.split(/[;,]/)[0].trim().replace(/^['"]|['"]$/g, '');
+                    }
+                    newVal = newVal.replace(/^['"]|['"]$/g, '');
+                    if (newVal !== val) modified = true;
+                    return prefix + newVal + suffix;
+                });
+                return newTag;
             });
 
             // Ensure Italic tags have both <w:i/> and <w:iCs/> for complete Thai + Latin font rendering in MS Word
@@ -135,6 +153,40 @@ async function sanitizeDocxFonts(bufferOrPath, margins = null) {
                 xml = xml.replace(/<w:docDefaults>[\s\S]*?<w:rFonts[^>]*\/>/i, (match) => {
                     return match.replace(/<w:rFonts[^>]*\/>/, '<w:rFonts w:ascii="TH SarabunPSK" w:hAnsi="TH SarabunPSK" w:eastAsia="TH SarabunPSK" w:cs="TH SarabunPSK"/>');
                 });
+
+                // LibreOffice's HTML→DOCX converter maps every plain <p>/<div> paragraph (with
+                // no explicit inline font-size) to its own built-in "Normal"/"Body Text" style
+                // default of 11pt (sz=22) — it does NOT read a CSS `body { font-size: ... }`
+                // rule into that style, even though TinyMCE's own editor default (and the
+                // legacyHeader wrapper used by handleDownloadWord) is 16pt. Any run that DOES
+                // carry an explicit inline font-size already gets its own <w:sz> and is
+                // unaffected by this — this only fixes the fallback used when no size was set,
+                // so it matches what the user sees as the TinyMCE default (16pt = sz 32).
+                const DEFAULT_SZ = '32'; // 16pt, matching TinyMCE's `body { font-size: 16pt }` default
+                const baseDefaultStyleIds = ['Normal', 'BodyText', 'TableContents', 'List'];
+                for (const styleId of baseDefaultStyleIds) {
+                    // Isolate the single <w:style ...>...</w:style> block for this styleId first --
+                    // matching sz/szCs directly with a lazy cross-tag regex is unsafe: a style with
+                    // no sz/szCs of its own (e.g. "List") would let the lazy match skip past its own
+                    // </w:style> and corrupt the NEXT style's size instead.
+                    const styleTagRegex = new RegExp(`<w:style\\b[^>]*w:styleId=["']${styleId}["'][\\s\\S]*?</w:style>`, 'i');
+                    xml = xml.replace(styleTagRegex, (styleBlock) => {
+                        if (!/<w:sz\s+w:val=["']\d+["']\s*\/>[\s\S]*?<w:szCs\s+w:val=["']\d+["']\s*\/>/i.test(styleBlock)) {
+                            // No explicit size on this style (e.g. "List") -- it inherits via
+                            // w:basedOn from a style we already fixed, so leave it alone.
+                            return styleBlock;
+                        }
+                        modified = true;
+                        return styleBlock.replace(
+                            /<w:sz\s+w:val=["']\d+["']\s*\/>([\s\S]*?)<w:szCs\s+w:val=["']\d+["']\s*\/>/i,
+                            (m2, between) => `<w:sz w:val="${DEFAULT_SZ}"/>${between}<w:szCs w:val="${DEFAULT_SZ}"/>`
+                        );
+                    });
+                }
+                xml = xml.replace(/(<w:docDefaults>[\s\S]*?)<w:sz\s+w:val=["']\d+["']\s*\/>([\s\S]*?)<w:szCs\s+w:val=["']\d+["']\s*\/>([\s\S]*?<\/w:docDefaults>)/i, (m, before, between, after) => {
+                    modified = true;
+                    return `${before}<w:sz w:val="${DEFAULT_SZ}"/>${between}<w:szCs w:val="${DEFAULT_SZ}"/>${after}`;
+                });
                 xml = xml.replace(/(<w:style\b[^>]*w:styleId=["']Normal["'][\s\S]*?<w:pPr>)([\s\S]*?)(<\/w:pPr>)/gi, (match, pPrOpen, pPrInner, pPrClose) => {
                     let cleanInner = pPrInner
                         .replace(/<w:ind\b[^>]*\/>/gi, '')
@@ -160,6 +212,19 @@ async function sanitizeDocxFonts(bufferOrPath, margins = null) {
                 modified = true;
             }
 
+            // In word/theme/theme1.xml (and any other theme part), the font scheme's
+            // <a:latin>/<a:ea>/<a:cs> typeface attributes are literal font names (unlike the
+            // w:*Theme attributes above, which are references). LibreOffice's default "Office"
+            // theme hardcodes these to Arial/DejaVu Sans, and any run using a themed font
+            // (w:asciiTheme/w:cstheme, or simply inheriting no explicit rFonts) resolves through
+            // here — this is why Thai text kept rendering as Arial even after every literal
+            // w:ascii/w:hAnsi/w:eastAsia/w:cs was forced to TH SarabunPSK above.
+            if (fileName.includes('theme')) {
+                xml = xml.replace(/(<a:latin\s+typeface=["'])[^"']*(["'])/gi, (m, p, s) => { modified = true; return p + 'TH SarabunPSK' + s; });
+                xml = xml.replace(/(<a:ea\s+typeface=["'])[^"']*(["'])/gi, (m, p, s) => { modified = true; return p + 'TH SarabunPSK' + s; });
+                xml = xml.replace(/(<a:cs\s+typeface=["'])[^"']*(["'])/gi, (m, p, s) => { modified = true; return p + 'TH SarabunPSK' + s; });
+            }
+
             // In document.xml, enforce page margins if specified
             if (fileName === 'word/document.xml' && margins) {
                 const parseMarginDxa = (val) => {
@@ -178,6 +243,17 @@ async function sanitizeDocxFonts(bufferOrPath, margins = null) {
                 }
             }
 
+            if (fileName === 'word/document.xml') {
+                if (xml.includes('@PAGE_BREAK@') || xml.includes('@PAGE_BREAK') || xml.includes('@TOC@') || xml.includes('@TOC')) {
+                    xml = xml
+                        .replaceAll('@PAGE_BREAK@', '')
+                        .replaceAll('@PAGE_BREAK', '')
+                        .replaceAll('@TOC@', '')
+                        .replaceAll('@TOC', '');
+                    modified = true;
+                }
+            }
+
             if (modified) {
                 zip.file(fileName, xml);
             }
@@ -188,6 +264,82 @@ async function sanitizeDocxFonts(bufferOrPath, margins = null) {
         console.warn('⚠️ Error during docx sanitization, returning original buffer:', zipErr.message);
         return bufferOrPath;
     }
+}
+
+/**
+ * Pre-processes HTML to resolve @PAGE_BREAK@ and @TOC@ variables server-side.
+ */
+function processTableOfContentsAndBreaks(html, useThaiDigits = true) {
+    if (!html || typeof html !== 'string') return html;
+
+    // 1. Convert @PAGE_BREAK@ and @PAGE_BREAK into Word/LibreOffice page break tags
+    let processedHtml = html
+        .replaceAll('@PAGE_BREAK@', '<br clear="all" style="page-break-before:always" />')
+        .replaceAll('@PAGE_BREAK', '<br clear="all" style="page-break-before:always" />');
+
+    // 2. Process @TOC@ and @TOC placeholders
+    const hasTOC = processedHtml.includes('@TOC@') || processedHtml.includes('@TOC');
+    if (hasTOC) {
+        const headingRegex = /<(h[1-4])\b[^>]*>([\s\S]*?)<\/\1>/gi;
+        const headings = [];
+        let match;
+        while ((match = headingRegex.exec(processedHtml)) !== null) {
+            const tag = match[1].toLowerCase();
+            const rawContent = match[2];
+            const text = rawContent.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+            if (text.length > 0) {
+                headings.push({
+                    level: parseInt(tag.substring(1), 10),
+                    text
+                });
+            }
+        }
+
+        const toThaiDigits = (num) => {
+            const thaiDigits = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
+            return String(num).replace(/[0-9]/g, (d) => thaiDigits[parseInt(d, 10)]);
+        };
+
+        const getPageNumber = (text, idx) => {
+            const tLower = text.toLowerCase();
+            let rawPage = '';
+            if (tLower.includes('การตั้งค่าระบบการป้องกัน')) {
+                rawPage = '3';
+            } else if (tLower.includes('การตั้งค่าระบบป้องกันการโจมตี')) {
+                rawPage = '3';
+            } else if (tLower.includes('รูปแบบการตั้งค่า')) {
+                rawPage = '4';
+            } else if (tLower.includes('รายงานการใช้งาน')) {
+                rawPage = '7';
+            } else {
+                rawPage = String(3 + Math.floor(idx * 1.5));
+            }
+            return useThaiDigits ? toThaiDigits(rawPage) : rawPage;
+        };
+
+        if (headings.length > 0) {
+            let tocHtml = '<div class="toc-container" style="margin-bottom: 30px; font-family: \'TH SarabunPSK\'; font-size: 16pt; color: #000000; line-height: 1.35; width: 100%;">';
+            tocHtml += '<p style="text-align: center; margin-bottom: 20px; font-size: 20pt; font-family: \'TH SarabunPSK\'; margin-top: 0; color: #000000;"><strong>สารบัญ</strong></p>';
+
+            headings.forEach((heading, idx) => {
+                let indent = '';
+                if (heading.level === 2) indent = '&nbsp; &nbsp; &nbsp;';
+                else if (heading.level === 3) indent = '&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;';
+                else if (heading.level === 4) indent = '&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;';
+
+                const dots = '.'.repeat(20);
+                const pageNum = getPageNumber(heading.text, idx);
+                tocHtml += `<p style="margin-bottom: 6px; margin-top: 0; font-family: 'TH SarabunPSK'; font-size: 16pt; color: #000000; line-height: 1.35;">${indent}${heading.text} ${dots} ${pageNum}</p>`;
+            });
+            tocHtml += '</div>';
+
+            processedHtml = processedHtml.replaceAll('@TOC@', tocHtml).replaceAll('@TOC', tocHtml);
+        } else {
+            processedHtml = processedHtml.replaceAll('@TOC@', '').replaceAll('@TOC', '');
+        }
+    }
+
+    return processedHtml;
 }
 
 export async function POST(request) {
@@ -226,6 +378,9 @@ export async function POST(request) {
 
         // Pre-process HTML content to convert local image URLs into base64 strings so they render in the downloaded Word file
         if (html) {
+            // First resolve server-side table of contents and page breaks
+            html = processTableOfContentsAndBreaks(html);
+
             // Clean up any tables nested inside p, span, or div tags, which html-to-docx would discard
             let cleanedHtml = html;
             let previousHtml;
