@@ -11,6 +11,7 @@ import {
 import Swal from '../utils/alert';
 import { Editor } from '@tinymce/tinymce-react';
 import { REPORT_VARIABLES, STATIC_VARIABLES } from '../variableDefinitions';
+import { getInappPreviewHtml } from '../utils/inappTemplates';
 import { DELAY_CONFIG } from '@/lib/delay-config';
 import { auth } from '@/app/utils/auth';
 import { getUserProfileAction } from '@/app/actions/authActions';
@@ -95,6 +96,13 @@ export default function ControlPage() {
      const [capturedTopEventsSourceScreenshot, setCapturedTopEventsSourceScreenshot] = useState(null);
      const [captureMeta, setCaptureMeta] = useState({});
      const [isCapturingDirect, setIsCapturingDirect] = useState(false);
+     // 'screenshot' shows the real captured image; 'inapp' shows the app-generated @inapp_* table preview
+     const [capturePreviewMode, setCapturePreviewMode] = useState('screenshot');
+     const [inappZoneSettings, setInappZoneSettings] = useState(null);
+     const [isLoadingInappPreview, setIsLoadingInappPreview] = useState(false);
+     const [inappLoadBalancers, setInappLoadBalancers] = useState(null);
+     const [inappSpeedResult, setInappSpeedResult] = useState(null);
+     const [inappTrafficData, setInappTrafficData] = useState(null);
      const [isCapturingAll, setIsCapturingAll] = useState(false);
      const [captureAllStatus, setCaptureAllStatus] = useState({ current: 0, total: 21, currentLabel: '' });
      const abortCaptureAllRef = useRef(false);
@@ -897,6 +905,178 @@ export default function ControlPage() {
             setIsLoadingSettings(false);
         }
     };
+
+    // Fetches real zone settings (min TLS version, TLS 1.3, etc.) used by the "inapp" preview
+    // tab, so the app-generated table shows real data instead of just the mockup placeholder.
+    // Cached in state so switching tabs doesn't refetch every time; call again to refresh.
+    // Some tabs need extra real data beyond get-zone-settings (Load Balancing's own Cloudflare
+    // API, Speed Test's live-browser DOM read) — fetched only when that tab is the active one.
+    const loadInappPreviewData = async (tabId, forceRefresh = false) => {
+        if (!envZone) return;
+
+        if (tabId === 'loadBalancingSpectrum') {
+            if (inappLoadBalancers && !forceRefresh) return;
+            setIsLoadingInappPreview(true);
+            try {
+                const res = await callAPI('get-load-balancers', { zoneId: envZone, accountId: envAccount });
+                if (res && res.data) {
+                    setInappLoadBalancers(res.data.loadBalancers || []);
+                }
+            } catch (err) {
+                console.error('Failed to load load balancers for inapp preview:', err);
+            } finally {
+                setIsLoadingInappPreview(false);
+            }
+            return;
+        }
+
+        if (tabId === 'speed') {
+            // Live browser status, not a cacheable REST fetch — always re-check.
+            // NOTE: this endpoint legitimately returns success:false for 'waiting'/'error'/'running'
+            // statuses (that's part of its normal vocabulary, not a request failure), so we must
+            // NOT go through callAPI() here — callAPI() discards any success:false body and would
+            // collapse every real status into the 'waiting' fallback below.
+            setIsLoadingInappPreview(true);
+            try {
+                const domainVal = zones.find(z => z.id === envZone)?.name || '';
+                const apiToken = currentUser?.cloudflare_api_token || auth.getCurrentUser()?.cloudflare_api_token;
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'check-speed-results', domainVal, apiToken }),
+                });
+                const res = await response.json();
+                setInappSpeedResult(res || { status: 'waiting' });
+            } catch (err) {
+                console.error('Failed to check speed test results for inapp preview:', err);
+                setInappSpeedResult({ status: 'error', error: err.message });
+            } finally {
+                setIsLoadingInappPreview(false);
+            }
+            return;
+        }
+
+        if (tabId === 'traffic' || tabId === 'trafficCountries' || tabId === 'topEventsSource') {
+            // The three traffic-analytics tabs share one GraphQL fetch (same action the report
+            // generator uses: 'get-traffic-analytics'), then each reduces it differently. Cached
+            // together in inappTrafficData since they're always viewed against the same date range.
+            if (inappTrafficData && !forceRefresh) return;
+            setIsLoadingInappPreview(true);
+            try {
+                const res = await callAPI('get-traffic-analytics', {
+                    zoneId: envZone,
+                    startDate: envStartDate,
+                    endDate: envEndDate,
+                    subdomain: envSubdomain || 'ALL_SUBDOMAINS',
+                });
+                if (res && res.data) {
+                    const filteredData = res.data.httpRequestsAdaptiveGroups || [];
+                    const zoneSummary = res.data.zoneSummary || [];
+                    const firewallSourcesData = res.data.firewallSources || [];
+
+                    // Total requests / bandwidth / page views / visits: same reduction as the
+                    // report's zoneWideRequests/zoneWideDataTransfer/pageViews/visits.
+                    let zReq = 0, zBytes = 0, zPageViews = 0, zUniques = 0;
+                    zoneSummary.forEach(day => {
+                        zReq += (day.sum?.requests || 0);
+                        zBytes += (day.sum?.bytes || 0);
+                        zPageViews += (day.sum?.pageViews || 0);
+                        zUniques += (day.uniq?.uniques || 0);
+                    });
+
+                    // Country breakdown: same reduction as the report's countryCounts, built by
+                    // walking httpRequestsAdaptiveGroups (each row is either a live GraphQL group
+                    // or a pre-aggregated SQLite "isSummary" row with its own nested totals).
+                    const countryCounts = {};
+                    filteredData.forEach(item => {
+                        if (item.isSummary) {
+                            (item.totals?.countries || []).forEach(c => {
+                                const name = c.clientCountryName || 'Unknown';
+                                countryCounts[name] = (countryCounts[name] || 0) + (c.requests || 0);
+                            });
+                            return;
+                        }
+                        const name = item.dimensions?.clientCountryName || 'Unknown';
+                        countryCounts[name] = (countryCounts[name] || 0) + (item.count || 0);
+                    });
+                    const topCountries = Object.entries(countryCounts)
+                        .map(([name, count]) => ({ name, count }))
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 8);
+
+                    // Events-by-source breakdown: same bucketing as the report's fwEvents.
+                    let fwTotal = 0, fwManaged = 0, fwCustom = 0, fwBic = 0, fwAccess = 0;
+                    firewallSourcesData.forEach(item => {
+                        const source = (item.dimensions?.source || 'Unknown');
+                        const count = item.count || 0;
+                        fwTotal += count;
+                        const s = source.toLowerCase();
+                        if (s === 'waf' || s === 'firewallmanaged' || s.includes('managed_rules') || s === 'managedrules') fwManaged += count;
+                        else if (s === 'firewallrules' || s === 'filterbasedfirewall' || s.includes('custom_rules') || s === 'firewallcustom' || s === 'firewall_rules' || s === 'customrules') fwCustom += count;
+                        else if (s === 'bic' || s === 'browser_integrity_check') fwBic += count;
+                        else if (s === 'accessrules' || s === 'ip_access_rules' || s === 'ip' || s === 'asn' || s === 'ipaddress' || s === 'ip_access_rule') fwAccess += count;
+                    });
+
+                    setInappTrafficData({
+                        zoneTotalRequests: zReq.toLocaleString(),
+                        zoneTotalDataTransfer: (zReq > 0 ? (zBytes / (1024 * 1024 * 1024)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00') + ' GB',
+                        pageViews: zPageViews,
+                        visits: zUniques,
+                        topCountries,
+                        fwEvents: { total: fwTotal, managed: fwManaged, custom: fwCustom, bic: fwBic, access: fwAccess },
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load traffic analytics for inapp preview:', err);
+            } finally {
+                setIsLoadingInappPreview(false);
+            }
+            return;
+        }
+
+        if (inappZoneSettings && !forceRefresh) return;
+        setIsLoadingInappPreview(true);
+        try {
+            const res = await callAPI('get-zone-settings', { zoneId: envZone });
+            if (res && res.data) {
+                setInappZoneSettings(res.data);
+            }
+        } catch (err) {
+            console.error('Failed to load zone settings for inapp preview:', err);
+        } finally {
+            setIsLoadingInappPreview(false);
+        }
+    };
+
+    // Switching tabs while already in "inapp" preview mode should refetch whatever that tab
+    // needs (load balancers, speed status) instead of leaving the previous tab's data showing.
+    useEffect(() => {
+        if (capturePreviewMode === 'inapp') {
+            loadInappPreviewData(activeCaptureTab);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeCaptureTab, capturePreviewMode]);
+
+    // Every inapp-preview cache (zone settings, load balancers, traffic analytics) is keyed
+    // implicitly by "whatever zone/date/subdomain was active when it was fetched" — none of them
+    // knew to invalidate themselves when the user changed those fields, so a stale zone's or
+    // stale date range's numbers could keep showing after a change (this is what made HTTP
+    // Traffic / Traffic Countries / Events by Source show "0" right after changing dates: the
+    // cache from the old range was still sitting there). Clear every cache whenever any of the
+    // fields that feed these fetches changes, and if the user is currently looking at the inapp
+    // preview, immediately force a refetch for the active tab instead of leaving it blank until
+    // the next tab switch.
+    useEffect(() => {
+        setInappZoneSettings(null);
+        setInappLoadBalancers(null);
+        setInappTrafficData(null);
+        // Speed Test status is intentionally NOT cleared here: it reflects the live debug
+        // browser's last run, which is independent of zone/date/subdomain selection.
+        if (capturePreviewMode === 'inapp') {
+            loadInappPreviewData(activeCaptureTab, true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [envZone, envStartDate, envEndDate, envSubdomain]);
 
     // Load Subdomains (DNS Records)
     const loadSubdomainsForZone = async (zoneId) => {
@@ -2597,8 +2777,72 @@ export default function ControlPage() {
                                                         )}
                                                     </div>
                                                 </div>
+
+                                                {/* Preview mode switcher: real screenshot vs. app-generated "inapp" table preview */}
+                                                <div className="flex items-center gap-1 bg-gray-900/60 border border-gray-800 rounded-lg p-0.5 shrink-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCapturePreviewMode('screenshot')}
+                                                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                                            capturePreviewMode === 'screenshot'
+                                                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                                                : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                                                        }`}
+                                                        title="แสดงภาพแคปหน้าจอจริง"
+                                                    >
+                                                        📸 ภาพแคปจริง
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCapturePreviewMode('inapp');
+                                                            loadInappPreviewData(activeCaptureTab);
+                                                        }}
+                                                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                                            capturePreviewMode === 'inapp'
+                                                                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                                                                : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                                                        }`}
+                                                        title="แสดงตัวแปร inapp (ตารางที่แอปสร้างเอง)"
+                                                    >
+                                                        🧩 inapp
+                                                    </button>
+                                                    {capturePreviewMode === 'inapp' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => loadInappPreviewData(activeCaptureTab, true)}
+                                                            disabled={isLoadingInappPreview}
+                                                            className="px-1.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer text-gray-500 hover:text-indigo-300 border border-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                                                            title="ดึงข้อมูล inapp ใหม่ (บังคับรีเฟรช ไม่ใช้ cache)"
+                                                        >
+                                                            <RefreshCw className={`w-3 h-3 ${isLoadingInappPreview ? 'animate-spin' : ''}`} />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
 
+                                            {capturePreviewMode === 'inapp' ? (
+                                                <div className="rounded-xl border border-indigo-800/60 bg-gray-950/60 p-4 overflow-auto">
+                                                    {isLoadingInappPreview ? (
+                                                        <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
+                                                            <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+                                                            <span>กำลังโหลดข้อมูลจริงสำหรับตัวอย่าง inapp...</span>
+                                                        </div>
+                                                    ) : (
+                                                        <div
+                                                            className="inapp-preview-html"
+                                                            dangerouslySetInnerHTML={{ __html: getInappPreviewHtml(activeCaptureTab, inappZoneSettings, {
+                                                                zoneName: zones.find(z => z.id === envZone)?.name,
+                                                                accountName: accounts.find(a => a.id === envAccount)?.name,
+                                                                loadBalancers: inappLoadBalancers,
+                                                                speedResult: inappSpeedResult,
+                                                                trafficData: inappTrafficData,
+                                                            }) }}
+                                                        />
+                                                    )}
+                                                </div>
+                                            ) : (
+                                            <>
                                             {/* Screenshot Preview (Multi-image in 2 columns, single image centered) */}
                                             {current.img ? (
                                                 current.isSpeedDual && Array.isArray(current.img) ? (
@@ -2652,6 +2896,8 @@ export default function ControlPage() {
                                                         <p className="text-xs text-gray-500 max-w-md">กดปุ่ม <strong>"📸 Capture This Page Now"</strong> ด้านล่าง เพื่อจับภาพหน้าจอนี้จากเบราว์เซอร์สด</p>
                                                     </div>
                                                 </div>
+                                            )}
+                                            </>
                                             )}
 
                                             {/* Crop Coordinates Controls directly under the screenshot image */}

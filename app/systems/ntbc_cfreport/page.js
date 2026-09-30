@@ -30,6 +30,15 @@ import Swal from './utils/alert';
 import { THEMES } from '@/app/utils/themes';
 import { Editor } from '@tinymce/tinymce-react';
 import { REPORT_VARIABLES, STATIC_VARIABLES, CATEGORY_META } from './variableDefinitions';
+import {
+    generateMockupTable,
+    generateToggleTable,
+    generateSettingCardDropdown,
+    generateSettingCardToggle,
+    generateTagCounterCard,
+    generateStatGrid,
+    generateRuleListTable,
+} from './utils/inappTemplates';
 import { DELAY_CONFIG } from '@/lib/delay-config';
 
 // --- CONSTANTS ---
@@ -133,6 +142,7 @@ const generateHtmlTable = (headers, rows, styles = {}) => {
     html += `</tbody></table>`;
     return html;
 };
+
 
 
 
@@ -612,6 +622,164 @@ const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null
         '@PAGE_BREAK': '<br clear="all" style="page-break-before:always" />',
         // Dashboard Screenshot Image
         '@DASHBOARD_IMAGE': dashboardImage ? `<div class="mb-6" style="text-align: center;"><img src="${dashboardImage}" alt="Dashboard Snapshot" width="${imageWidths['@DASHBOARD_IMAGE']}" style="height: auto; display: block; margin: 0 auto;" /></div>` : '',
+        // --- @inapp_* table replicas (app-generated alternative to each @captured_* screenshot) ---
+        // Each uses real report data (safeData) where available; ones with no real data source
+        // yet still fall back to generateMockupTable — see utils/inappTemplates.js for the
+        // shared renderers (also used live in control/page.js's screenshot/inapp preview tabs).
+        '@inapp_domain_page': generateStatGrid('Sites Overview', [
+            { label: 'Domain', value: safeData.zoneName || '-' },
+            { label: 'Account', value: safeData.accountName || '-' },
+            { label: 'SSL Mode', value: safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown' },
+            { label: 'DNS Records', value: safeData.dnsRecordsStatus === 'Enabled' ? 'Active' : (safeData.dnsRecordsStatus || 'Unknown') },
+        ]),
+        '@inapp_dns_page': generateStatGrid('DNS Records', [
+            { label: 'Status', value: safeData.dnsRecordsStatus || 'Unknown' },
+        ]),
+        '@inapp_firewall_page': generateStatGrid('Security Analytics Overview', [
+            { label: 'DDoS Protection', value: safeData.ddosProtection || 'Unknown' },
+            { label: 'Leaked Credentials Check', value: safeData.leakedCredentials || 'Unknown' },
+            { label: 'Zone Lockdown Rules', value: safeData.zoneLockdownRules ?? 0 },
+            { label: 'Hotlink Protection', value: safeData.hotlinkProtection || 'Unknown' },
+        ]),
+        '@inapp_security_rules_page': generateRuleListTable(
+            `Security Rules — Custom Rules (${safeData.customRules?.status || 'None'})`,
+            [
+                { key: 'description', label: 'Name / Description' },
+                { key: 'action', label: 'Action' },
+                { key: 'status', label: 'Status' },
+            ],
+            safeData.customRules?.rules
+        ),
+        '@inapp_argo_page': generateSettingCardToggle(
+            'Argo Smart Routing',
+            'Argo is a service that uses optimized routes across the Cloudflare network to deliver responses to your users more quickly, reliably, and securely.',
+            safeData.argoSmartRouting === 'Enabled'
+        ),
+        '@inapp_speed_page': generateStatGrid('Speed Test (Desktop)', [
+            { label: 'Score', value: safeData.speedScorePct || '-' },
+            { label: 'Level', value: safeData.speedLevel || '-' },
+        ]),
+        '@inapp_speed_mobile_page': generateStatGrid('Speed Test (Mobile)', [
+            { label: 'Score', value: safeData.speedMobileScorePct || '-' },
+            { label: 'Level', value: safeData.speedMobileLevel || '-' },
+            { label: 'Time to Interactive', value: safeData.speedMobileTimeToInteractive || '-' },
+            { label: 'Speed Index', value: safeData.speedMobileIndex || '-' },
+        ]),
+        '@inapp_request_traffic_page': generateStatGrid('HTTP Traffic — Requests', [
+            { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
+            { label: 'Cache Hit Requests', value: safeData.zoneCacheHitRequests || '0' },
+            { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitRequestsRatio || '0.00%' },
+        ]),
+        '@inapp_data_transfer_traffic_page': generateStatGrid('HTTP Traffic — Data Transfer', [
+            { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
+            { label: 'Cache Hit Bandwidth', value: safeData.zoneCacheHitDataTransfer || '0.00 GB' },
+            { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitDataTransferRatio || '0.00%' },
+        ]),
+        '@inapp_page_views_traffic_page': generateStatGrid('HTTP Traffic — Page Views', [
+            { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
+        ]),
+        '@inapp_visits_traffic_page': generateStatGrid('HTTP Traffic — Visits', [
+            { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
+        ]),
+        '@inapp_api_requests_traffic_page': generateMockupTable('HTTP Traffic - API Requests'),
+        '@inapp_traffic_page': generateStatGrid('HTTP Traffic Overview', [
+            { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
+            { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
+            { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
+            { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
+        ]),
+        '@inapp_bot_management': generateTagCounterCard(
+            'Bot Management',
+            'Detect and mitigate automated traffic to protect your domain from bad bots, using machine-learning models trained on Cloudflare\'s network.',
+            ['Bot traffic', 'DDoS attacks'],
+            safeData.botManagementEnabled === 'Enabled' ? 'ON' : 'OFF'
+        ),
+        '@inapp_security_level': generateSettingCardDropdown(
+            'Security Level',
+            'Choose the appropriate security profile for your website, which will automatically adjust each Cloudflare security setting.',
+            safeData.securityLevel && safeData.securityLevel !== 'pending' ? safeData.securityLevel : 'Medium'
+        ),
+        '@inapp_ssl_overview': generateSettingCardDropdown(
+            'SSL/TLS Encryption Mode',
+            'Choose the SSL/TLS encryption mode for connections between visitors, Cloudflare, and your origin server.',
+            safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown'
+        ),
+        '@inapp_ssl_edge': generateSettingCardDropdown(
+            'Minimum TLS Version',
+            'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
+            safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
+        ),
+        '@inapp_min_tls_version': generateSettingCardDropdown(
+            'Minimum TLS Version',
+            'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
+            safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
+        ),
+        '@inapp_tls_1_3': generateSettingCardToggle(
+            'TLS 1.3',
+            'The latest version of TLS improves security and reduces connection latency for encrypted connections to your website.',
+            safeData.tls13 === 'Enabled'
+        ),
+        '@inapp_browser_integrity': generateSettingCardToggle(
+            'Browser Integrity Check',
+            'Evaluate HTTP headers commonly abused by spammers and denies access to your page based on this information.',
+            safeData.browserIntegrityCheck === 'Enabled'
+        ),
+        '@inapp_load_balancing_spectrum': generateMockupTable('Load Balancing and Spectrum'),
+        '@inapp_rate_limiting_page': generateRuleListTable(
+            `Rate Limiting Rules (${safeData.rateLimits?.status || 'None'})`,
+            [
+                { key: 'description', label: 'Name / Description' },
+                { key: 'match', label: 'Match' },
+                { key: 'action', label: 'Action' },
+                { key: 'status', label: 'Status' },
+            ],
+            safeData.rateLimits?.rules
+        ),
+        '@inapp_managed_rules_page': generateRuleListTable(
+            `Managed Rules (${safeData.managedRulesCount || '0'} active)`,
+            [
+                { key: 'description', label: 'Name' },
+                { key: 'action', label: 'Action' },
+                { key: 'status', label: 'Status' },
+            ],
+            [
+                { description: 'Cloudflare Managed Ruleset', action: 'Execute', status: safeData.cloudflareManaged || 'Disabled' },
+                { description: 'Cloudflare OWASP Core Ruleset', action: 'Execute', status: safeData.owaspCore || 'Disabled' },
+            ]
+        ),
+        '@inapp_ip_access_page': generateRuleListTable(
+            'IP Access Rules',
+            [
+                { key: 'ip', label: 'IP / Value' },
+                { key: 'action', label: 'Action' },
+                { key: 'scope', label: 'Scope' },
+                { key: 'notes', label: 'Notes' },
+            ],
+            safeData.ipAccessRules,
+            'ไม่มีการตั้งค่า IP Access Rules'
+        ),
+        '@inapp_zone_lockdown_page': generateStatGrid('Zone Lockdown Rules', [
+            { label: 'Configured Rules', value: safeData.zoneLockdownRules ?? 0 },
+        ]),
+        '@inapp_traffic_countries_page': generateRuleListTable(
+            'Traffic by Country',
+            [
+                { key: 'country', label: 'Country' },
+                { key: 'count', label: 'Requests' },
+            ],
+            (safeData.topCountries || []).slice(0, 8).map(c => ({
+                country: getCountryName(c.name),
+                count: (c.count || 0).toLocaleString(),
+            })),
+            'ไม่มีข้อมูลประเทศในช่วงเวลานี้'
+        ),
+        '@inapp_top_events_source_page': generateStatGrid('Top Events by Source', [
+            { label: 'Total Events', value: safeData.fwEvents?.total ?? 0 },
+            { label: 'Managed Rules', value: safeData.fwEvents?.managed ?? 0 },
+            { label: 'Custom Rules', value: safeData.fwEvents?.custom ?? 0 },
+            { label: 'Browser Integrity', value: safeData.fwEvents?.bic ?? 0 },
+            { label: 'IP Access', value: safeData.fwEvents?.access ?? 0 },
+        ]),
     };
 
     // CRITICAL: Process special placeholders FIRST before simple replacements

@@ -2178,6 +2178,74 @@ export async function POST(request) {
             }
         }
 
+        // Load Balancing overview: mirrors the "Manage public load balancers" table
+        // (Health / Hostname / Available Pools / TTL / Proxied / Enabled) for the @inapp_load_balancing_spectrum
+        // variable — real data straight from Cloudflare's Load Balancer API, no screenshot needed.
+        else if (action === 'get-load-balancers') {
+            if (!zoneId) return NextResponse.json({ success: false, message: 'Missing zoneId' }, { status: 400 });
+            try {
+                const headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                };
+
+                const lbRes = await axios.get(
+                    `${CLOUDFLARE_API_BASE}/zones/${zoneId}/load_balancers`,
+                    { headers }
+                ).catch(err => {
+                    console.log('Load Balancers fetch failed:', err.response?.status, err.response?.data?.errors?.[0]?.message);
+                    return null;
+                });
+
+                const loadBalancers = (lbRes && lbRes.data && lbRes.data.result) ? lbRes.data.result : [];
+
+                // Pool health is account-scoped and one call per pool, so only fetch it when there
+                // aren't too many distinct pools referenced (keeps this action fast and bounded).
+                const poolIds = [...new Set(loadBalancers.flatMap(lb => lb.default_pools || []))];
+                let poolHealthById = {};
+                if (accountId && poolIds.length > 0 && poolIds.length <= 20) {
+                    const poolHealthResults = await Promise.all(poolIds.map(poolId =>
+                        axios.get(
+                            `${CLOUDFLARE_API_BASE}/accounts/${accountId}/load_balancers/pools/${poolId}/health`,
+                            { headers }
+                        ).then(res => ({ poolId, health: res.data?.result?.pool_id ? res.data.result : res.data?.result })).catch(() => ({ poolId, health: null }))
+                    ));
+                    poolHealthResults.forEach(({ poolId, health }) => {
+                        poolHealthById[poolId] = health;
+                    });
+                }
+
+                const rows = loadBalancers.map(lb => {
+                    const pools = lb.default_pools || [];
+                    const anyUnhealthy = pools.some(pid => {
+                        const h = poolHealthById[pid];
+                        return h && h.healthy === false;
+                    });
+                    const anyHealthData = pools.some(pid => poolHealthById[pid] != null);
+                    return {
+                        health: anyHealthData ? (anyUnhealthy ? 'Unhealthy' : 'Healthy') : 'Unknown',
+                        hostname: lb.name || 'unknown',
+                        availablePools: pools.length,
+                        ttl: lb.ttl ?? '-',
+                        proxied: lb.proxied ? 'Yes' : 'No',
+                        enabled: lb.enabled ? 'Enabled' : 'Disabled',
+                    };
+                });
+
+                return NextResponse.json({
+                    success: true,
+                    data: { loadBalancers: rows, totalCount: rows.length }
+                });
+            } catch (error) {
+                console.error('Load Balancers Fetch Error:', error.message);
+                return NextResponse.json({
+                    success: false,
+                    message: 'Failed to fetch load balancers',
+                    error: error.message
+                }, { status: 500 });
+            }
+        }
+
         else if (action === 'get-sync-status') {
             if (!zoneId) return NextResponse.json({ success: false, message: 'Missing zoneId' }, { status: 400 });
             try {

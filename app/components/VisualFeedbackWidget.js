@@ -148,6 +148,12 @@ export default function VisualFeedbackWidget() {
     }
   }
 
+  // Platform-aware label for the copy shortcut hint shown on the button (Cmd+Enter on Mac,
+  // Ctrl+Enter elsewhere) — the actual keydown handler above already supports both.
+  const shortcutKeyLabel = (typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform))
+    ? '⌘+Enter'
+    : 'Ctrl+Enter';
+
   const handleCopyPrompt = () => {
     if (!targetInfo) return;
 
@@ -340,6 +346,7 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
                   <button
                     type="button"
                     onClick={handleCopyPrompt}
+                    title={`คัดลอกคำสั่ง (${shortcutKeyLabel})`}
                     className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer ${
                       copied
                         ? 'bg-emerald-600 text-white shadow-emerald-500/20'
@@ -355,6 +362,9 @@ ${feedbackText || '(ระบุสิ่งที่ต้องการให
                       <>
                         <Copy className="w-3.5 h-3.5" />
                         <span>คัดลอกคำสั่ง (Copy Prompt)</span>
+                        <kbd className="ml-1 px-1.5 py-0.5 rounded-md bg-white/15 text-[10px] font-mono font-semibold tracking-tight">
+                          {shortcutKeyLabel}
+                        </kbd>
                       </>
                     )}
                   </button>
