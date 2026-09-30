@@ -11,6 +11,7 @@ import TableSettingsModal, { DEFAULT_TABLE_COLUMN_WIDTHS } from './TableSettings
 import PageMarginSettingsModal from './PageMarginSettingsModal';
 import AutoReportModal from './AutoReportModal';
 import DepartmentModal from './DepartmentModal';
+import BackgroundJobsModal from './BackgroundJobsModal';
 import SearchableDropdown from './SearchableDropdown';
 import { saveCloudflareTokenAction } from '@/app/actions/authActions';
 import {
@@ -1816,6 +1817,41 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
                 try { document.body.removeChild(iframe); } catch (_) { }
             }, 1500);
         };
+
+        const isWorkerMode = (typeof window !== 'undefined' && (localStorage.getItem('ntbc_worker_mode') === 'true' || window.location.search.includes('mode=worker')));
+
+        if (isWorkerMode) {
+            // Background-job mode: no real browser to receive a file download, so fetch the
+            // generated .docx as bytes and stash it on window for the Puppeteer worker to read
+            // and write to disk (mirrors GDCC's window.__lastBatchReport* pattern).
+            try {
+                let marginsValue = null;
+                try { marginsValue = localStorage.getItem('ntbc:page-margins'); } catch (e) {}
+
+                const formData = new FormData();
+                formData.append('html', cleanHeader + cleanHTML + footer);
+                formData.append('filename', filename);
+                formData.append('title', filename.includes('template') ? 'Report Template' : 'Cloudflare Report');
+                if (marginsValue) formData.append('margins', marginsValue);
+
+                const res = await fetch('/api/export-docx', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error(`export-docx failed: HTTP ${res.status}`);
+                const arrayBuffer = await res.arrayBuffer();
+                let binary = '';
+                const bytes = new Uint8Array(arrayBuffer);
+                const chunkSize = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+                }
+                window.__ntbcLastReportBase64 = btoa(binary);
+                window.__ntbcLastReportFileName = filename;
+                window.__ntbcLastBatchReportReady = true;
+            } catch (error) {
+                console.error('Worker-mode Word export error:', error);
+                window.__ntbcLastBatchReportError = error?.message || 'Failed to generate Word file';
+            }
+            return;
+        }
 
         try {
             // Use a hidden iframe target so the browser downloads .docx with exact margins
@@ -4011,6 +4047,8 @@ const DEFAULT_CONFIG = {
 export default function NTBCCFReportPage() {
     const router = useRouter();
     const [currentUser, setCurrentUser] = useState(null);
+    const [isBackgroundJobsModalOpen, setIsBackgroundJobsModalOpen] = useState(false);
+    const [isNtbcJobActive, setIsNtbcJobActive] = useState(false);
 
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isReportMenuOpen, setIsReportMenuOpen] = useState(false); // Dropdown State
@@ -4887,6 +4925,22 @@ export default function NTBCCFReportPage() {
         router.push('/systems/ntbc_cfreport/control');
     };
 
+    const handleOpenCloudflareHome = async () => {
+        try {
+            const res = await fetch('/api/ntbc-launch-chrome');
+            const result = await res.json();
+            if (result.success) {
+                setMainVncStreamKey(Date.now());
+                Swal.toast('success', 'Cloudflare Home Opened', 'The debug browser is now on dash.cloudflare.com.');
+            } else {
+                throw new Error(result.message || 'Unknown error');
+            }
+        } catch (err) {
+            console.error('Open Cloudflare Home failed:', err);
+            Swal.toast('error', 'Failed to Open Cloudflare Home', err.message || 'Could not reach the debug browser.');
+        }
+    };
+
     // Helper to get unique hosts for Batch Modal (filter out the "ALL_SUBDOMAINS" option if needed, or keep it)
     const getBatchHosts = () => {
         return subDomains
@@ -5045,16 +5099,19 @@ export default function NTBCCFReportPage() {
 
     const handleCaptureScreenshotConfirm = async (batchQueue, batchStartDate, batchEndDate, templateId = 'default', promotedHosts = [], zoneId = null, exportSeparated = false, batchModalZones = [], exportThaiDigits = false) => {
         setUseThaiDigits(exportThaiDigits);
-        setIsBatchModalOpen(false);
-        if(!batchQueue || batchQueue.length === 0) return;
-        
+        if(!batchQueue || batchQueue.length === 0) { setIsBatchModalOpen(false); return; }
+
+        const isWorkerMode = (typeof window !== 'undefined' && (localStorage.getItem('ntbc_worker_mode') === 'true' || window.location.search.includes('mode=worker')));
+
         // Group queue by Zone to process efficiently
         const groupedByZone = {};
         batchQueue.forEach(item => {
             if(!groupedByZone[item.zoneId]) {
                 groupedByZone[item.zoneId] = {
                     accountId: item.accountId,
+                    accountName: item.accountName,
                     zoneId: item.zoneId,
+                    zoneName: item.zoneName,
                     hosts: []
                 };
             }
@@ -5062,6 +5119,89 @@ export default function NTBCCFReportPage() {
         });
 
         const zonesToProcess = Object.values(groupedByZone);
+
+        if (!isWorkerMode) {
+            // Normal (interactive) mode: never run the live 21-step capture directly from the
+            // UI anymore — enqueue one background job per zone instead, mirroring GDCC. The
+            // worker (headless-attached to the shared debug browser) runs handleCaptureScreenshotConfirm
+            // itself later via window.__ntbcHandleBatchReport, in worker mode, where this branch is skipped.
+            setIsBatchModalOpen(false);
+
+            Swal.fire({
+                title: 'Starting Background Job...',
+                html: 'Please wait while we queue the report generation on the server...',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => { Swal.showLoading(); },
+                background: '#111827',
+                color: '#fff'
+            });
+
+            try {
+                let anyQueuedBehindActive = false;
+                for (const zoneGroup of zonesToProcess) {
+                    const res = await fetch('/api/ntbc/report-jobs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: currentUser?.id || 'anonymous',
+                            accountId: zoneGroup.accountId,
+                            accountName: zoneGroup.accountName,
+                            zoneId: zoneGroup.zoneId,
+                            zoneName: zoneGroup.zoneName,
+                            subdomains: zoneGroup.hosts,
+                            startDate: batchStartDate,
+                            endDate: batchEndDate,
+                            templateId: templateId,
+                            exportThaiDigits: exportThaiDigits,
+                            userSession: currentUser
+                        })
+                    });
+                    const data = await res.json();
+                    if (!data.success) {
+                        throw new Error(data.message || `Failed to queue job for zone ${zoneGroup.zoneName}`);
+                    }
+                    if (data.data?.queuedBehindActive) anyQueuedBehindActive = true;
+                }
+
+                Swal.close();
+                Swal.fire({
+                    title: 'Job(s) Queued!',
+                    html: `
+                        <div class="text-left space-y-2">
+                            <p>Report generation has started in the background on the server${anyQueuedBehindActive ? ' (some zones are queued behind a job already processing)' : ''}.</p>
+                            <p class="text-xs text-gray-400">You can safely close this browser tab, minimize the window, or navigate to other parts of the application. Screenshot capture and Word document compilation will run automatically, one zone at a time.</p>
+                        </div>
+                    `,
+                    icon: 'success',
+                    showCancelButton: true,
+                    confirmButtonText: 'View Progress',
+                    cancelButtonText: 'Close',
+                    confirmButtonColor: '#3B82F6',
+                    cancelButtonColor: '#4B5563',
+                    background: '#111827',
+                    color: '#fff'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        setIsBackgroundJobsModalOpen(true);
+                    }
+                });
+                setIsNtbcJobActive(true);
+            } catch (error) {
+                console.error('Failed to trigger NTBC background report:', error);
+                Swal.fire({
+                    title: 'Failed to start job',
+                    text: error.message,
+                    icon: 'error',
+                    background: '#111827',
+                    color: '#fff',
+                    confirmButtonColor: '#ef4444'
+                });
+            }
+            return;
+        }
+
+        setIsBatchModalOpen(false);
         
         for (let i = 0; i < zonesToProcess.length; i++) {
             const currentZone = zonesToProcess[i];
@@ -5081,6 +5221,36 @@ export default function NTBCCFReportPage() {
             });
         }
     };
+
+    // Expose the batch-capture entry point on window so a headless worker-mode
+    // Puppeteer tab (?mode=worker) can invoke it directly, mirroring GDCC's
+    // window.__handleBatchReport pattern.
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.__ntbcHandleBatchReport = handleCaptureScreenshotConfirm;
+        }
+    }, [handleCaptureScreenshotConfirm]);
+
+    // Poll whether an NTBC background job is currently processing, so the manual
+    // "SELECT & CAPTURE" flow can be disabled while it runs (both share the ONE
+    // authenticated debug browser tab and would collide otherwise).
+    useEffect(() => {
+        let cancelled = false;
+        const pollActive = async () => {
+            try {
+                const res = await fetch('/api/ntbc/report-jobs?action=has-active');
+                const data = await res.json();
+                if (!cancelled && data.success) {
+                    setIsNtbcJobActive(!!data.active);
+                }
+            } catch (e) {
+                // Non-fatal: leave previous known state as-is.
+            }
+        };
+        pollActive();
+        const interval = setInterval(pollActive, 5000);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, []);
 
     const processSingleZoneCapture = async (activeZoneId, activeAccountId, selectedHosts, batchStartDate, batchEndDate, templateId = 'default', promotedHosts = [], exportSeparated = false, currentIndex = 0, totalZones = 1) => {
         let isCancelled = false;
@@ -6486,6 +6656,7 @@ export default function NTBCCFReportPage() {
                 autoDownloadWord={autoDownloadWord}
                 onAutoDownloadComplete={() => {
                     setAutoDownloadWord(false);
+                    setIsReportModalOpen(false);
                     if (window.__batchNext) {
                         window.__batchNext();
                         window.__batchNext = null;
@@ -6496,6 +6667,13 @@ export default function NTBCCFReportPage() {
             <ScreenshotPreviewModal isOpen={showScreenshotModal} onClose={() => setShowScreenshotModal(false)} imgUrl={capturedDomainImage} theme={theme} />
 
             <VncModal isOpen={isVncModalOpen} onClose={() => setIsVncModalOpen(false)} theme={theme} />
+
+            <BackgroundJobsModal
+                isOpen={isBackgroundJobsModalOpen}
+                onClose={() => setIsBackgroundJobsModalOpen(false)}
+                theme={theme}
+                currentUser={currentUser}
+            />
 
             <ManageTemplateModal
                 isOpen={isManageTemplateModalOpen}
@@ -6669,6 +6847,23 @@ export default function NTBCCFReportPage() {
                                 title="Quick Cloudflare Login & Debug Session"
                             >
                                 <Terminal className="w-3.5 h-3.5 text-amber-400" /> Quick Debug Session
+                            </button>
+                            <button
+                                onClick={() => handleOpenCloudflareHome()}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 hover:text-blue-200 text-xs font-medium transition-colors shadow-sm cursor-pointer"
+                                title="Open Cloudflare Home Page"
+                            >
+                                <Globe className="w-3.5 h-3.5 text-blue-400" /> Cloudflare Home
+                            </button>
+                            <button
+                                onClick={() => setIsBackgroundJobsModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 hover:text-purple-200 text-xs font-medium transition-colors shadow-sm cursor-pointer relative"
+                                title="View Background Report Jobs"
+                            >
+                                <Clock className="w-3.5 h-3.5 text-purple-400" /> Background Jobs
+                                {isNtbcJobActive && (
+                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse border border-gray-900" title="A job is currently processing" />
+                                )}
                             </button>
                             <a
                                 href="/vnc/?autoconnect=1&resize=scale&path=websockify"
