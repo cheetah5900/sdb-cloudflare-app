@@ -14,21 +14,24 @@
 // report, but the final exported .docx will still render this text in TH SarabunPSK.
 const ROBOTO_FONT_IMPORT = "<style>@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');</style>";
 
-// Renders a genuine iPhone/iOS-style on/off switch: a solid-colour pill track (Apple's
-// systemGreen #34c759 when on, light systemGray5 #e9e9ea when off) with an ALWAYS-WHITE
-// circular knob that slides to the right when on / left when off, plus a soft drop shadow
-// under the knob for depth — matching the real iOS control pixel-for-pixel in spirit, not a
-// tinted-knob imitation. Shared by every @inapp_* renderer that shows a 2-state switch, so
-// Bot Management's ON/OFF, the TLS 1.3 / Browser Integrity / Argo toggle cards, and the
-// Status/Enabled/Proxied columns in rule-list tables all look identical.
+// Renders a genuine iPhone/iOS-style on/off switch, built the same way the real CSS
+// control is (a position:absolute knob inside a position:relative track), not a nested
+// table — a nested <table><td> inherits the surrounding 16pt Roboto line-height, which left
+// a large empty gap below the knob instead of the track hugging it tightly. Proportions match
+// Apple's real control (51x31 track, 27x27 knob, 2px inset) by default: solid-colour pill
+// track (systemGreen #34c759 on / systemGray5 #e9e9ea off) with an ALWAYS-WHITE circular
+// knob plus a soft drop shadow, sliding right when on / left when off. Shared by every
+// @inapp_* renderer that shows a 2-state switch (Bot Management's ON/OFF, the TLS 1.3 /
+// Browser Integrity / Argo toggle cards, and the Status/Enabled/Proxied rule-table columns)
+// so they all look pixel-identical to each other and to the real iOS switch.
 const buildIosToggleHtml = (isEnabled, trackWidth, trackHeight) => {
-    const w = trackWidth || 36;
-    const h = trackHeight || 20;
-    const knob = h - 4;
+    const w = trackWidth || 51;
+    const h = trackHeight || 31;
+    const inset = 2;
+    const knob = h - inset * 2;
     const trackColor = isEnabled ? '#34c759' : '#e9e9ea';
-    return `<table style="border-collapse: collapse; width: ${w}px; height: ${h}px; background-color: ${trackColor}; border-radius: ${h / 2}px;"><tbody>
-        <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: ${knob}px; height: ${knob}px; background-color: #ffffff; border-radius: 50%; margin: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.35);">&nbsp;</span></td></tr>
-    </tbody></table>`;
+    const knobLeft = isEnabled ? (w - knob - inset) : inset;
+    return `<span style="display: inline-block; position: relative; width: ${w}px; height: ${h}px; background-color: ${trackColor}; border-radius: ${h}px; vertical-align: middle; font-size: 0; line-height: 0;"><span style="position: absolute; top: ${inset}px; left: ${knobLeft}px; width: ${knob}px; height: ${knob}px; background-color: #ffffff; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15), 0 1px 1px rgba(0,0,0,0.16);"></span></span>`;
 };
 
 // Generic placeholder ("mockup") table for an @inapp_* variable whose real layout/data has
@@ -79,7 +82,7 @@ export const generateToggleTable = (label, isEnabled, statusText) => {
                 <td style="${cellStyle} width: 65%;">${label}</td>
                 <td style="${cellStyle} width: 35%; text-align: center; background-color: ${bgColor};">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 51, 31)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; font-family: 'Roboto', sans-serif; font-size: 14pt; font-weight: bold; color: ${textColor};">${displayStatus}</td>
                     </tr></tbody></table>
                 </td>
@@ -128,7 +131,7 @@ export const generateSettingCardToggle = (title, description, isEnabled, statusT
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 32%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 51, 31)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; ${cellFont} font-size: 13pt; font-weight: bold; color: ${textColor};">${displayStatus}</td>
                     </tr></tbody></table>
                 </td>
@@ -162,7 +165,7 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 22%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 51, 31)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; ${cellFont} font-size: 13pt; font-weight: bold; color: ${textColor};">${badgeText}</td>
                     </tr></tbody></table>
                 </td>
@@ -271,7 +274,7 @@ export const generateRuleListTable = (title, columns, rows, emptyText) => {
                 const on = isTwoStateOn(value);
                 const textColor = on ? '#166534' : '#6b7280';
                 inner = `<table style="border-collapse: collapse; display: inline-table; vertical-align: middle;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(on, 28, 16)}</td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(on, 34, 20)}</td>
                         <td style="border: none; padding: 0; vertical-align: middle; ${cellFont} font-size: 10pt; font-weight: bold; color: ${textColor}; white-space: nowrap;">${value}</td>
                     </tr></tbody></table>`;
             } else if (isPillCol) {
