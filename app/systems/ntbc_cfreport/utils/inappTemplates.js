@@ -96,6 +96,12 @@ export const generateToggleTable = (label, isEnabled, statusText) => {
 // dropdown-style box with the current value on the right.
 export const generateSettingCardDropdown = (title, description, valueText) => {
     const cellFont = "font-family: 'Roboto', sans-serif;";
+    // Same html2canvas text-vertical-centering quirk as the status pills and tag chips: the
+    // dropdown value text ("Medium ▼" etc.) renders ~8.7px below the true center of its box.
+    // Empirically confirmed via 5 rendered nudge variants (0/-2/-4/-6/-8px), pixel-measured
+    // and visually reviewed: -8px is the closest to dead-center (~0.7px residual offset).
+    // Used by every @inapp_* "setting card dropdown" (Minimum TLS Version, SSL/TLS Encryption
+    // Mode, Security Level), so all of them get the same fix.
     return `${ROBOTO_FONT_IMPORT}<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; margin-top: 0; margin-bottom: 0; table-layout: fixed;">
         <tbody>
             <tr>
@@ -105,7 +111,7 @@ export const generateSettingCardDropdown = (title, description, valueText) => {
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 32%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: 1px solid #d1d5db; background-color: #ffffff; padding: 8px 14px; ${cellFont} font-size: 14pt; color: #374151; white-space: nowrap;">${valueText}&nbsp;&nbsp;▼</td>
+                        <td style="border: 1px solid #d1d5db; background-color: #ffffff; padding: 8px 14px; ${cellFont} font-size: 14pt; color: #374151; white-space: nowrap;"><span style="position: relative; top: -8px; display: inline-block; line-height: 1;">${valueText}&nbsp;&nbsp;▼</span></td>
                     </tr></tbody></table>
                 </td>
             </tr>
