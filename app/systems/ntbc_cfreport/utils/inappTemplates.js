@@ -142,6 +142,13 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
         `<span style="display: inline-block; ${cellFont} font-size: 11pt; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;"><span style="position: relative; top: -7px; display: inline-block; line-height: 1; white-space: nowrap;">${t}</span></span>`
     )).join('');
 
+    // Two-state status (ON/OFF) rendered as an iPhone-style green toggle switch, matching
+    // the look used by generateSettingCardToggle for every other 2-state setting card.
+    const isEnabled = badgeText === 'ON' || badgeText === 'Enabled' || badgeText === true;
+    const trackColor = isEnabled ? '#86efac' : '#d1d5db';
+    const knobColor = isEnabled ? '#16a34a' : '#9ca3af';
+    const textColor = isEnabled ? '#166534' : '#6b7280';
+
     return `${ROBOTO_FONT_IMPORT}<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; margin-top: 0; margin-bottom: 0; table-layout: fixed;">
         <tbody>
             <tr>
@@ -151,7 +158,14 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
                     <div>${tagsHtml}</div>
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 22%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
-                    <div style="display: inline-block; width: 40px; height: 40px; line-height: 40px; border-radius: 50%; background-color: #e0e7ff; color: #4338ca; ${cellFont} font-size: 16pt; font-weight: bold;">${badgeText}</div>
+                    <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
+                            <table style="border-collapse: collapse; width: 34px; height: 18px; background-color: ${trackColor}; border-radius: 9px;"><tbody>
+                                <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: 14px; height: 14px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
+                            </tbody></table>
+                        </td>
+                        <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; ${cellFont} font-size: 13pt; font-weight: bold; color: ${textColor};">${badgeText}</td>
+                    </tr></tbody></table>
                 </td>
             </tr>
         </tbody>
@@ -239,15 +253,38 @@ export const generateRuleListTable = (title, columns, rows, emptyText) => {
         `<td style="border: 1px solid #e5e7eb; padding: 8px 10px; background-color: #f9fafb; ${cellFont} font-size: 11pt; font-weight: bold; color: #374151;">${c.label}</td>`
     )).join('');
 
+    // Columns whose real-world value only ever has two possible states (on/off,
+    // enabled/disabled, proxied/not, active/disabled) render as an iPhone-style green
+    // toggle switch instead of a colour pill, matching generateSettingCardToggle /
+    // generateTagCounterCard. Columns that can take 3+ distinct values (action, health)
+    // keep the colour-pill treatment since a toggle can't represent more than 2 states.
+    const twoStateValues = ['active', 'enabled', 'on', 'yes', 'proxied', 'true'];
+    const isTwoStateOn = (value) => twoStateValues.includes((value || '').toString().toLowerCase());
+
     const bodyHtml = data.slice(0, maxRows).map(row => {
         const cellsHtml = cols.map((c, idx) => {
             const raw = row[c.key];
             const value = (raw === undefined || raw === null || raw === '') ? '-' : raw;
-            const isStatusCol = ['status', 'action', 'health', 'enabled', 'proxied'].includes(c.key);
-            const pillStyle = isStatusCol ? statusPillStyle(value) : '';
-            const inner = isStatusCol
-                ? `<span style="display: inline-block; padding: 4px 10px; border-radius: 999px; ${pillStyle}"><span style="position: relative; top: -8px; display: inline-block; font-weight: bold; font-size: 10pt; line-height: 1; white-space: nowrap;">${value}</span></span>`
-                : value;
+            const isToggleCol = ['status', 'enabled', 'proxied'].includes(c.key);
+            const isPillCol = ['action', 'health'].includes(c.key);
+            let inner = value;
+            if (isToggleCol) {
+                const on = isTwoStateOn(value);
+                const trackColor = on ? '#86efac' : '#d1d5db';
+                const knobColor = on ? '#16a34a' : '#9ca3af';
+                const textColor = on ? '#166534' : '#6b7280';
+                inner = `<table style="border-collapse: collapse; display: inline-table; vertical-align: middle;"><tbody><tr>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
+                            <table style="border-collapse: collapse; width: 28px; height: 15px; background-color: ${trackColor}; border-radius: 8px;"><tbody>
+                                <tr><td style="border: none; padding: 0; text-align: ${on ? 'right' : 'left'};"><span style="display: inline-block; width: 11px; height: 11px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
+                            </tbody></table>
+                        </td>
+                        <td style="border: none; padding: 0; vertical-align: middle; ${cellFont} font-size: 10pt; font-weight: bold; color: ${textColor}; white-space: nowrap;">${value}</td>
+                    </tr></tbody></table>`;
+            } else if (isPillCol) {
+                const pillStyle = statusPillStyle(value);
+                inner = `<span style="display: inline-block; padding: 4px 10px; border-radius: 999px; ${pillStyle}"><span style="position: relative; top: -8px; display: inline-block; font-weight: bold; font-size: 10pt; line-height: 1; white-space: nowrap;">${value}</span></span>`;
+            }
             return `<td style="border: 1px solid #e5e7eb; padding: 8px 10px; ${cellFont} font-size: 11pt; color: #1f2937; ${idx === 0 ? 'font-weight: 600;' : ''}">${inner}</td>`;
         }).join('');
         return `<tr>${cellsHtml}</tr>`;
