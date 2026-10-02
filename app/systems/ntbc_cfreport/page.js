@@ -6,7 +6,8 @@ import { auth } from '@/app/utils/auth';
 import { getUserProfileAction } from '@/app/actions/authActions';
 import { loadTemplate, saveTemplate, loadStaticTemplate, saveStaticTemplate, loadMiddleTemplate, saveMiddleTemplate, listTemplates } from '@/app/utils/ntbcTemplateApi';
 import ManageTemplateModal from './ManageTemplateModal';
-import ImageSettingsModal from './ImageSettingsModal';
+import ControlPage from './control/page';
+import ImageSettingsModal, { IMAGE_CONFIG_ITEMS } from './ImageSettingsModal';
 import TableSettingsModal, { DEFAULT_TABLE_COLUMN_WIDTHS } from './TableSettingsModal';
 import PageMarginSettingsModal from './PageMarginSettingsModal';
 import AutoReportModal from './AutoReportModal';
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as htmlToImage from 'html-to-image';
+import html2canvas from 'html2canvas';
 import Swal from './utils/alert';
 import { THEMES } from '@/app/utils/themes';
 import { Editor } from '@tinymce/tinymce-react';
@@ -381,14 +383,179 @@ const formatActionName = (action) => {
     ).join(' ');
 };
 
-const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null) => {
+// Builds the raw-HTML "@inapp_*" table replicas (see utils/inappTemplates.js for the shared
+// renderers) from safeData. Pulled out of processTemplate's big `replacements` object so the
+// exact same generator calls can be reused by renderInappImagesForExport() (below) to pre-render
+// each one into a flat PNG for the Word export pipeline — the nested tables / border-radius
+// tricks these mockups use (toggle switches, setting cards) don't survive the .docx converter,
+// so export swaps them for a plain <img>, exactly like @captured_* and @uploaded_* already are.
+// Live, on-screen preview still uses the raw HTML version (processTemplate's default behavior)
+// since the in-browser renderer handles it fine — only the exported file needs the image.
+const buildInappHtmlMap = (safeData) => ({
+    '@inapp_domain_page': generateStatGrid('Sites Overview', [
+        { label: 'Domain', value: safeData.zoneName || '-' },
+        { label: 'Account', value: safeData.accountName || '-' },
+        { label: 'SSL Mode', value: safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown' },
+        { label: 'DNS Records', value: safeData.dnsRecordsStatus === 'Enabled' ? 'Active' : (safeData.dnsRecordsStatus || 'Unknown') },
+    ]),
+    '@inapp_dns_page': generateStatGrid('DNS Records', [
+        { label: 'Status', value: safeData.dnsRecordsStatus || 'Unknown' },
+    ]),
+    '@inapp_firewall_page': generateStatGrid('Security Analytics Overview', [
+        { label: 'DDoS Protection', value: safeData.ddosProtection || 'Unknown' },
+        { label: 'Leaked Credentials Check', value: safeData.leakedCredentials || 'Unknown' },
+        { label: 'Zone Lockdown Rules', value: safeData.zoneLockdownRules ?? 0 },
+        { label: 'Hotlink Protection', value: safeData.hotlinkProtection || 'Unknown' },
+    ]),
+    '@inapp_security_rules_page': generateRuleListTable(
+        `Security Rules — Custom Rules (${safeData.customRules?.status || 'None'})`,
+        [
+            { key: 'description', label: 'Name / Description' },
+            { key: 'action', label: 'Action' },
+            { key: 'status', label: 'Status' },
+        ],
+        safeData.customRules?.rules
+    ),
+    '@inapp_argo_page': generateSettingCardToggle(
+        'Argo Smart Routing',
+        'Argo is a service that uses optimized routes across the Cloudflare network to deliver responses to your users more quickly, reliably, and securely.',
+        safeData.argoSmartRouting === 'Enabled'
+    ),
+    '@inapp_speed_page': generateStatGrid('Speed Test (Desktop)', [
+        { label: 'Score', value: safeData.speedScorePct || '-' },
+        { label: 'Level', value: safeData.speedLevel || '-' },
+    ]),
+    '@inapp_speed_mobile_page': generateStatGrid('Speed Test (Mobile)', [
+        { label: 'Score', value: safeData.speedMobileScorePct || '-' },
+        { label: 'Level', value: safeData.speedMobileLevel || '-' },
+        { label: 'Time to Interactive', value: safeData.speedMobileTimeToInteractive || '-' },
+        { label: 'Speed Index', value: safeData.speedMobileIndex || '-' },
+    ]),
+    '@inapp_request_traffic_page': generateStatGrid('HTTP Traffic — Requests', [
+        { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
+        { label: 'Cache Hit Requests', value: safeData.zoneCacheHitRequests || '0' },
+        { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitRequestsRatio || '0.00%' },
+    ]),
+    '@inapp_data_transfer_traffic_page': generateStatGrid('HTTP Traffic — Data Transfer', [
+        { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
+        { label: 'Cache Hit Bandwidth', value: safeData.zoneCacheHitDataTransfer || '0.00 GB' },
+        { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitDataTransferRatio || '0.00%' },
+    ]),
+    '@inapp_page_views_traffic_page': generateStatGrid('HTTP Traffic — Page Views', [
+        { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
+    ]),
+    '@inapp_visits_traffic_page': generateStatGrid('HTTP Traffic — Visits', [
+        { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
+    ]),
+    '@inapp_api_requests_traffic_page': generateMockupTable('HTTP Traffic - API Requests'),
+    '@inapp_traffic_page': generateStatGrid('HTTP Traffic Overview', [
+        { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
+        { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
+        { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
+        { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
+    ]),
+    '@inapp_bot_management': generateTagCounterCard(
+        'Bot Management',
+        'Detect and mitigate automated traffic to protect your domain from bad bots, using machine-learning models trained on Cloudflare\'s network.',
+        ['Bot traffic', 'DDoS attacks'],
+        safeData.botManagementEnabled === 'Enabled' ? 'ON' : 'OFF'
+    ),
+    '@inapp_security_level': generateSettingCardDropdown(
+        'Security Level',
+        'Choose the appropriate security profile for your website, which will automatically adjust each Cloudflare security setting.',
+        safeData.securityLevel && safeData.securityLevel !== 'pending' ? safeData.securityLevel : 'Medium'
+    ),
+    '@inapp_ssl_overview': generateSettingCardDropdown(
+        'SSL/TLS Encryption Mode',
+        'Choose the SSL/TLS encryption mode for connections between visitors, Cloudflare, and your origin server.',
+        safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown'
+    ),
+    '@inapp_ssl_edge': generateSettingCardDropdown(
+        'Minimum TLS Version',
+        'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
+        safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
+    ),
+    '@inapp_min_tls_version': generateSettingCardDropdown(
+        'Minimum TLS Version',
+        'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
+        safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
+    ),
+    '@inapp_tls_1_3': generateSettingCardToggle(
+        'TLS 1.3',
+        'The latest version of TLS improves security and reduces connection latency for encrypted connections to your website.',
+        safeData.tls13 === 'Enabled'
+    ),
+    '@inapp_browser_integrity': generateSettingCardToggle(
+        'Browser Integrity Check',
+        'Evaluate HTTP headers commonly abused by spammers and denies access to your page based on this information.',
+        safeData.browserIntegrityCheck === 'Enabled'
+    ),
+    '@inapp_load_balancing_spectrum': generateMockupTable('Load Balancing and Spectrum'),
+    '@inapp_rate_limiting_page': generateRuleListTable(
+        `Rate Limiting Rules (${safeData.rateLimits?.status || 'None'})`,
+        [
+            { key: 'description', label: 'Name / Description' },
+            { key: 'match', label: 'Match' },
+            { key: 'action', label: 'Action' },
+            { key: 'status', label: 'Status' },
+        ],
+        safeData.rateLimits?.rules
+    ),
+    '@inapp_managed_rules_page': generateRuleListTable(
+        `Managed Rules (${safeData.managedRulesCount || '0'} active)`,
+        [
+            { key: 'description', label: 'Name' },
+            { key: 'action', label: 'Action' },
+            { key: 'status', label: 'Status' },
+        ],
+        [
+            { description: 'Cloudflare Managed Ruleset', action: 'Execute', status: safeData.cloudflareManaged || 'Disabled' },
+            { description: 'Cloudflare OWASP Core Ruleset', action: 'Execute', status: safeData.owaspCore || 'Disabled' },
+        ]
+    ),
+    '@inapp_ip_access_page': generateRuleListTable(
+        'IP Access Rules',
+        [
+            { key: 'ip', label: 'IP / Value' },
+            { key: 'action', label: 'Action' },
+            { key: 'scope', label: 'Scope' },
+            { key: 'notes', label: 'Notes' },
+        ],
+        safeData.ipAccessRules,
+        'ไม่มีการตั้งค่า IP Access Rules'
+    ),
+    '@inapp_zone_lockdown_page': generateStatGrid('Zone Lockdown Rules', [
+        { label: 'Configured Rules', value: safeData.zoneLockdownRules ?? 0 },
+    ]),
+    '@inapp_traffic_countries_page': generateRuleListTable(
+        'Traffic by Country',
+        [
+            { key: 'country', label: 'Country' },
+            { key: 'count', label: 'Requests' },
+        ],
+        (safeData.topCountries || []).slice(0, 8).map(c => ({
+            country: getCountryName(c.name),
+            count: (c.count || 0).toLocaleString(),
+        })),
+        'ไม่มีข้อมูลประเทศในช่วงเวลานี้'
+    ),
+    '@inapp_top_events_source_page': generateStatGrid('Top Events by Source', [
+        { label: 'Total Events', value: safeData.fwEvents?.total ?? 0 },
+        { label: 'Managed Rules', value: safeData.fwEvents?.managed ?? 0 },
+        { label: 'Custom Rules', value: safeData.fwEvents?.custom ?? 0 },
+        { label: 'Browser Integrity', value: safeData.fwEvents?.bic ?? 0 },
+        { label: 'IP Access', value: safeData.fwEvents?.access ?? 0 },
+    ]),
+});
+
+const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null, inappImages = null) => {
     // If static template mode, return raw HTML (no replacement)
     // Mode check removed here as we pass safeData specifically for processing
     let html = tmpl;
 
-    let imageWidths = {
-        '@DASHBOARD_IMAGE': 504
-    };
+    // Keyed by Image Size & Crop Settings config `key` (e.g. "domains"), exactly how
+    // ImageSettingsModal saves it — NOT by @VARIABLE name. widthFor() below does that mapping.
+    let imageWidths = {};
     if (typeof window !== 'undefined') {
         try {
             const stored = localStorage.getItem('ntbc:cropped-image-widths');
@@ -578,6 +745,38 @@ const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null
         '@captured_browser_integrity': (safeData.capturedBrowserIntegrityImage || safeData.captured_browser_integrity) ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.capturedBrowserIntegrityImage || safeData.captured_browser_integrity)}" alt="Captured Browser Integrity Check" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
         '@captured_load_balancing_spectrum': (safeData.capturedLoadBalancingSpectrumImage || safeData.captured_load_balancing_spectrum) ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.capturedLoadBalancingSpectrumImage || safeData.captured_load_balancing_spectrum)}" alt="Captured Load Balancing Spectrum" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
 
+        // "@uploaded_*": user-supplied manual override images (see the uploadedXImage state
+        // declared near the control-page image-loading effect). Same <img> wrapper as
+        // "@captured_*" above, just a different, simpler source — no legacy fallback field
+        // since these never existed as anything other than this new state.
+        '@uploaded_domain_page': safeData.uploadedDomainImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedDomainImage)}" alt="Uploaded Domain Page" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_dns_page': safeData.uploadedDnsImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedDnsImage)}" alt="Uploaded DNS Records Page" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_request_traffic_page': safeData.uploadedTrafficImageSub1 ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImageSub1)}" alt="Uploaded HTTP Traffic Requests" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_data_transfer_traffic_page': safeData.uploadedTrafficImageSub2 ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImageSub2)}" alt="Uploaded HTTP Traffic Data Transfer" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_page_views_traffic_page': safeData.uploadedTrafficImageSub3 ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImageSub3)}" alt="Uploaded HTTP Traffic Page Views" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_visits_traffic_page': safeData.uploadedTrafficImageSub4 ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImageSub4)}" alt="Uploaded HTTP Traffic Visits" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_api_requests_traffic_page': safeData.uploadedTrafficImageSub5 ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImageSub5)}" alt="Uploaded HTTP Traffic API Requests" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_traffic_page': safeData.uploadedTrafficImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficImage)}" alt="Uploaded HTTP Traffic" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_firewall_page': safeData.uploadedFirewallImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedFirewallImage)}" alt="Uploaded Firewall Overview" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_security_rules_page': safeData.uploadedSecurityRulesImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSecurityRulesImage)}" alt="Uploaded Security Rules" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_argo_page': safeData.uploadedArgoImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedArgoImage)}" alt="Uploaded Argo Smart Routing" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_speed_page': safeData.uploadedSpeedImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSpeedImage)}" alt="Uploaded Speed Test" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_speed_mobile_page': safeData.uploadedSpeedMobileImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSpeedMobileImage)}" alt="Uploaded Speed Test (Mobile)" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_bot_management': safeData.uploadedBotManagementImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedBotManagementImage)}" alt="Uploaded Bot Management" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_security_level': safeData.uploadedSecurityLevelImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSecurityLevelImage)}" alt="Uploaded Security Level" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_ssl_overview': safeData.uploadedSslOverviewImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSslOverviewImage)}" alt="Uploaded SSL/TLS Encryption" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_ssl_edge': (safeData.uploadedSslEdgeImage || safeData.uploadedMinTlsVersionImage) ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedSslEdgeImage || safeData.uploadedMinTlsVersionImage)}" alt="Uploaded Minimum TLS Version" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_rate_limiting_page': safeData.uploadedRateLimitingImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedRateLimitingImage)}" alt="Uploaded Rate Limiting Rules" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_managed_rules_page': safeData.uploadedManagedRulesImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedManagedRulesImage)}" alt="Uploaded Managed WAF Rules" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_ip_access_page': safeData.uploadedIpAccessImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedIpAccessImage)}" alt="Uploaded IP Access Rules" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_zone_lockdown_page': safeData.uploadedZoneLockdownImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedZoneLockdownImage)}" alt="Uploaded Zone Lockdown Rules" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_traffic_countries_page': safeData.uploadedTrafficCountriesImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTrafficCountriesImage)}" alt="Uploaded Traffic by Country" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_top_events_source_page': safeData.uploadedTopEventsSourceImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTopEventsSourceImage)}" alt="Uploaded Top Events by Source" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_min_tls_version': safeData.uploadedMinTlsVersionImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedMinTlsVersionImage)}" alt="Uploaded Minimum TLS Version" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_tls_1_3': safeData.uploadedTls13Image ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedTls13Image)}" alt="Uploaded TLS 1.3" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_browser_integrity': safeData.uploadedBrowserIntegrityImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedBrowserIntegrityImage)}" alt="Uploaded Browser Integrity Check" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+        '@uploaded_load_balancing_spectrum': safeData.uploadedLoadBalancingSpectrumImage ? `<div class="mb-6" style="text-align: center;"><img src="${cleanImageSrc(safeData.uploadedLoadBalancingSpectrumImage)}" alt="Uploaded Load Balancing Spectrum" width="504" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>` : '',
+
 
         // DDoS Protection - individual protections (convert Always On to Enable)
         '@HTTP_DDOS_PROTECTION': (safeData.httpDdosProtection === 'Always On' ? 'Enable' : safeData.httpDdosProtection) || 'unknown',
@@ -623,164 +822,46 @@ const processTemplate = (tmpl, safeData, now = new Date(), dashboardImage = null
         // Dashboard Screenshot Image
         '@DASHBOARD_IMAGE': dashboardImage ? `<div class="mb-6" style="text-align: center;"><img src="${dashboardImage}" alt="Dashboard Snapshot" width="${imageWidths['@DASHBOARD_IMAGE']}" style="height: auto; display: block; margin: 0 auto;" /></div>` : '',
         // --- @inapp_* table replicas (app-generated alternative to each @captured_* screenshot) ---
-        // Each uses real report data (safeData) where available; ones with no real data source
-        // yet still fall back to generateMockupTable — see utils/inappTemplates.js for the
-        // shared renderers (also used live in control/page.js's screenshot/inapp preview tabs).
-        '@inapp_domain_page': generateStatGrid('Sites Overview', [
-            { label: 'Domain', value: safeData.zoneName || '-' },
-            { label: 'Account', value: safeData.accountName || '-' },
-            { label: 'SSL Mode', value: safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown' },
-            { label: 'DNS Records', value: safeData.dnsRecordsStatus === 'Enabled' ? 'Active' : (safeData.dnsRecordsStatus || 'Unknown') },
-        ]),
-        '@inapp_dns_page': generateStatGrid('DNS Records', [
-            { label: 'Status', value: safeData.dnsRecordsStatus || 'Unknown' },
-        ]),
-        '@inapp_firewall_page': generateStatGrid('Security Analytics Overview', [
-            { label: 'DDoS Protection', value: safeData.ddosProtection || 'Unknown' },
-            { label: 'Leaked Credentials Check', value: safeData.leakedCredentials || 'Unknown' },
-            { label: 'Zone Lockdown Rules', value: safeData.zoneLockdownRules ?? 0 },
-            { label: 'Hotlink Protection', value: safeData.hotlinkProtection || 'Unknown' },
-        ]),
-        '@inapp_security_rules_page': generateRuleListTable(
-            `Security Rules — Custom Rules (${safeData.customRules?.status || 'None'})`,
-            [
-                { key: 'description', label: 'Name / Description' },
-                { key: 'action', label: 'Action' },
-                { key: 'status', label: 'Status' },
-            ],
-            safeData.customRules?.rules
-        ),
-        '@inapp_argo_page': generateSettingCardToggle(
-            'Argo Smart Routing',
-            'Argo is a service that uses optimized routes across the Cloudflare network to deliver responses to your users more quickly, reliably, and securely.',
-            safeData.argoSmartRouting === 'Enabled'
-        ),
-        '@inapp_speed_page': generateStatGrid('Speed Test (Desktop)', [
-            { label: 'Score', value: safeData.speedScorePct || '-' },
-            { label: 'Level', value: safeData.speedLevel || '-' },
-        ]),
-        '@inapp_speed_mobile_page': generateStatGrid('Speed Test (Mobile)', [
-            { label: 'Score', value: safeData.speedMobileScorePct || '-' },
-            { label: 'Level', value: safeData.speedMobileLevel || '-' },
-            { label: 'Time to Interactive', value: safeData.speedMobileTimeToInteractive || '-' },
-            { label: 'Speed Index', value: safeData.speedMobileIndex || '-' },
-        ]),
-        '@inapp_request_traffic_page': generateStatGrid('HTTP Traffic — Requests', [
-            { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
-            { label: 'Cache Hit Requests', value: safeData.zoneCacheHitRequests || '0' },
-            { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitRequestsRatio || '0.00%' },
-        ]),
-        '@inapp_data_transfer_traffic_page': generateStatGrid('HTTP Traffic — Data Transfer', [
-            { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
-            { label: 'Cache Hit Bandwidth', value: safeData.zoneCacheHitDataTransfer || '0.00 GB' },
-            { label: 'Cache Hit Ratio', value: safeData.zoneCacheHitDataTransferRatio || '0.00%' },
-        ]),
-        '@inapp_page_views_traffic_page': generateStatGrid('HTTP Traffic — Page Views', [
-            { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
-        ]),
-        '@inapp_visits_traffic_page': generateStatGrid('HTTP Traffic — Visits', [
-            { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
-        ]),
-        '@inapp_api_requests_traffic_page': generateMockupTable('HTTP Traffic - API Requests'),
-        '@inapp_traffic_page': generateStatGrid('HTTP Traffic Overview', [
-            { label: 'Total Requests', value: safeData.zoneTotalRequests || (safeData.totalRequests || 0).toLocaleString() },
-            { label: 'Total Bandwidth', value: safeData.zoneTotalDataTransfer || '0.00 GB' },
-            { label: 'Page Views', value: (safeData.pageViews || 0).toLocaleString() },
-            { label: 'Visits', value: (safeData.visits || 0).toLocaleString() },
-        ]),
-        '@inapp_bot_management': generateTagCounterCard(
-            'Bot Management',
-            'Detect and mitigate automated traffic to protect your domain from bad bots, using machine-learning models trained on Cloudflare\'s network.',
-            ['Bot traffic', 'DDoS attacks'],
-            safeData.botManagementEnabled === 'Enabled' ? 'ON' : 'OFF'
-        ),
-        '@inapp_security_level': generateSettingCardDropdown(
-            'Security Level',
-            'Choose the appropriate security profile for your website, which will automatically adjust each Cloudflare security setting.',
-            safeData.securityLevel && safeData.securityLevel !== 'pending' ? safeData.securityLevel : 'Medium'
-        ),
-        '@inapp_ssl_overview': generateSettingCardDropdown(
-            'SSL/TLS Encryption Mode',
-            'Choose the SSL/TLS encryption mode for connections between visitors, Cloudflare, and your origin server.',
-            safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown'
-        ),
-        '@inapp_ssl_edge': generateSettingCardDropdown(
-            'Minimum TLS Version',
-            'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
-            safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
-        ),
-        '@inapp_min_tls_version': generateSettingCardDropdown(
-            'Minimum TLS Version',
-            'Only allow HTTPS connections from visitors that support the selected TLS protocol version or newer.',
-            safeData.minTlsVersion && safeData.minTlsVersion !== 'unknown' ? `TLS ${safeData.minTlsVersion}` : 'Unknown'
-        ),
-        '@inapp_tls_1_3': generateSettingCardToggle(
-            'TLS 1.3',
-            'The latest version of TLS improves security and reduces connection latency for encrypted connections to your website.',
-            safeData.tls13 === 'Enabled'
-        ),
-        '@inapp_browser_integrity': generateSettingCardToggle(
-            'Browser Integrity Check',
-            'Evaluate HTTP headers commonly abused by spammers and denies access to your page based on this information.',
-            safeData.browserIntegrityCheck === 'Enabled'
-        ),
-        '@inapp_load_balancing_spectrum': generateMockupTable('Load Balancing and Spectrum'),
-        '@inapp_rate_limiting_page': generateRuleListTable(
-            `Rate Limiting Rules (${safeData.rateLimits?.status || 'None'})`,
-            [
-                { key: 'description', label: 'Name / Description' },
-                { key: 'match', label: 'Match' },
-                { key: 'action', label: 'Action' },
-                { key: 'status', label: 'Status' },
-            ],
-            safeData.rateLimits?.rules
-        ),
-        '@inapp_managed_rules_page': generateRuleListTable(
-            `Managed Rules (${safeData.managedRulesCount || '0'} active)`,
-            [
-                { key: 'description', label: 'Name' },
-                { key: 'action', label: 'Action' },
-                { key: 'status', label: 'Status' },
-            ],
-            [
-                { description: 'Cloudflare Managed Ruleset', action: 'Execute', status: safeData.cloudflareManaged || 'Disabled' },
-                { description: 'Cloudflare OWASP Core Ruleset', action: 'Execute', status: safeData.owaspCore || 'Disabled' },
-            ]
-        ),
-        '@inapp_ip_access_page': generateRuleListTable(
-            'IP Access Rules',
-            [
-                { key: 'ip', label: 'IP / Value' },
-                { key: 'action', label: 'Action' },
-                { key: 'scope', label: 'Scope' },
-                { key: 'notes', label: 'Notes' },
-            ],
-            safeData.ipAccessRules,
-            'ไม่มีการตั้งค่า IP Access Rules'
-        ),
-        '@inapp_zone_lockdown_page': generateStatGrid('Zone Lockdown Rules', [
-            { label: 'Configured Rules', value: safeData.zoneLockdownRules ?? 0 },
-        ]),
-        '@inapp_traffic_countries_page': generateRuleListTable(
-            'Traffic by Country',
-            [
-                { key: 'country', label: 'Country' },
-                { key: 'count', label: 'Requests' },
-            ],
-            (safeData.topCountries || []).slice(0, 8).map(c => ({
-                country: getCountryName(c.name),
-                count: (c.count || 0).toLocaleString(),
-            })),
-            'ไม่มีข้อมูลประเทศในช่วงเวลานี้'
-        ),
-        '@inapp_top_events_source_page': generateStatGrid('Top Events by Source', [
-            { label: 'Total Events', value: safeData.fwEvents?.total ?? 0 },
-            { label: 'Managed Rules', value: safeData.fwEvents?.managed ?? 0 },
-            { label: 'Custom Rules', value: safeData.fwEvents?.custom ?? 0 },
-            { label: 'Browser Integrity', value: safeData.fwEvents?.bic ?? 0 },
-            { label: 'IP Access', value: safeData.fwEvents?.access ?? 0 },
-        ]),
+        // Built by buildInappHtmlMap() above (raw HTML, used for the on-screen preview). When
+        // exporting to Word, handleDownloadWord() pre-renders these to PNGs and passes them in as
+        // `inappImages`, and the width-handling loop just below swaps the raw HTML for an <img>.
+        ...buildInappHtmlMap(safeData),
     };
+
+    // Wire per-variable "Image Size & Crop Settings" width into the actual rendered output for
+    // all three variable families (@captured_X real screenshots, @inapp_X app-generated mockup
+    // tables, @uploaded_X user-uploaded images) plus @DASHBOARD_IMAGE. This also fixes a latent
+    // bug where @DASHBOARD_IMAGE's configured width never took effect, because the modal saves
+    // widths keyed by its config item `key` (e.g. "domains") while this map is keyed by
+    // "@VARIABLE" — widthFor() bridges the two via IMAGE_CONFIG_ITEMS.
+    const configByVarTag = Object.fromEntries(IMAGE_CONFIG_ITEMS.map(item => [item.varTag, item]));
+    const widthFor = (varTag) => {
+        const cfg = configByVarTag[varTag];
+        if (!cfg) return 504;
+        const stored = imageWidths[cfg.key];
+        return (stored !== undefined && stored !== null && stored !== '') ? stored : (cfg.defaultWidth || 504);
+    };
+    for (const varTag of Object.keys(replacements)) {
+        const val = replacements[varTag];
+        if (typeof val !== 'string' || !val) continue;
+        if (varTag.startsWith('@captured_') || varTag.startsWith('@uploaded_') || varTag === '@DASHBOARD_IMAGE') {
+            // These render as a literal <img ... width="504" .../> string; swap in the configured width.
+            replacements[varTag] = val.replace(/width="504"/g, `width="${widthFor(varTag)}"`);
+        } else if (varTag.startsWith('@inapp_')) {
+            if (inappImages && inappImages[varTag]) {
+                // Export mode: a pre-rendered PNG was supplied for this variable (see
+                // handleDownloadWord()/renderInappImagesForExport()) — use a flat <img> instead of
+                // the raw HTML table, since nested tables / border-radius tricks in the mockup
+                // tables don't survive the .docx export converter.
+                replacements[varTag] = `<div class="mb-6" style="text-align: center;"><img src="${inappImages[varTag]}" alt="" width="${widthFor(varTag)}" style="height: auto; display: block; margin: 0 auto; border: 1px solid #ddd;" /></div>`;
+            } else {
+                // Live preview: render as a full-width <table>; wrap in a centered, max-width
+                // container so the mockup table can be sized like a screenshot instead of always
+                // filling the page.
+                replacements[varTag] = `<div style="max-width: ${widthFor(varTag)}px; margin: 0 auto;">${val}</div>`;
+            }
+        }
+    }
 
     // CRITICAL: Process special placeholders FIRST before simple replacements
     // This prevents conflicts like @DNS_RECORDS replacing part of @DNS_RECORDS_ROWS
@@ -1293,6 +1374,76 @@ const VncModal = ({ isOpen, onClose, theme }) => {
 };
 
 // 1. Report Modal Component
+// Pre-renders every "@inapp_*" HTML table (see buildInappHtmlMap, near processTemplate above)
+// into a flat PNG data URL, for the Word export pipeline. The .docx export converter doesn't
+// faithfully reproduce the nested tables / border-radius tricks these mockups use for toggle
+// switches and setting cards (that's the "ตารางที่เห็นกับธีมสีอาจทำให้ภาพผิดพลาดได้" issue), so
+// the exported document gets a flat image instead — exactly like @captured_* and @uploaded_*
+// already are. Live, on-screen preview is unaffected; it keeps using the raw HTML version since
+// the browser renders it fine. Renders off-screen at a fixed, generous width for a crisp image —
+// the "Image Size & Crop Settings" width still controls how large it displays in the document.
+async function renderInappImagesForExport(safeData) {
+    const images = {};
+    if (typeof document === 'undefined') return images;
+
+    const inappHtmlMap = buildInappHtmlMap(safeData);
+    const container = document.createElement('div');
+    // NOTE: html-to-image's toPng() silently returns a blank/all-white image when the source
+    // element sits at a negative screen coordinate (even a modest one, e.g. left: -500px) —
+    // its internal bounding-rect/crop math breaks for off-screen-left/top positioning. It also
+    // turned out to hang indefinitely (never resolving, not even erroring) on this page
+    // specifically, on-screen or off, attached or fully detached — html2canvas (already a
+    // dependency) renders the exact same markup correctly in ~1s, so that's what's used below.
+    // This container is still kept anchored at (0, 0) rather than off-screen, just in case;
+    // visibility is hidden via a negative z-index (below the app's own content) and
+    // pointer-events: none.
+    container.style.position = 'fixed';
+    container.style.left = '0px';
+    container.style.top = '0px';
+    container.style.width = '900px';
+    container.style.background = '#ffffff';
+    container.style.zIndex = '-1';
+    container.style.pointerEvents = 'none';
+    document.body.appendChild(container);
+
+    // Races a promise against a timeout so one stuck render can't block the whole Word export
+    // forever — that variable just falls back to its raw HTML table.
+    const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+        promise.then(
+            (val) => { clearTimeout(timer); resolve(val); },
+            (err) => { clearTimeout(timer); reject(err); }
+        );
+    });
+
+    try {
+        for (const [varTag, html] of Object.entries(inappHtmlMap)) {
+            if (!html) continue;
+            container.innerHTML = html;
+            // Give the layout a moment to settle before capturing, so the rendered image doesn't
+            // catch a half-laid-out frame.
+            await new Promise(resolve => setTimeout(resolve, 60));
+            try {
+                const canvas = await withTimeout(
+                    html2canvas(container, {
+                        scale: 2,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                    }),
+                    15000
+                );
+                images[varTag] = canvas.toDataURL('image/png');
+            } catch (err) {
+                console.error(`[renderInappImagesForExport] Failed to render ${varTag} (falling back to raw HTML table):`, err);
+            }
+        }
+    } finally {
+        document.body.removeChild(container);
+    }
+
+    return images;
+}
+
 const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTemplate, onGenerate, mode = 'report', theme, templateName, templateId, currentUserId, capturedDomainImage, onCaptureScreenshot, autoDownloadWord = false, onAutoDownloadComplete, useThaiDigits, setUseThaiDigits }) => {
     // mode: 'report' | 'sub-template' | 'static-template' | 'middle-template'
     console.log('ReportModal Render:', { mode, templateType: typeof template, templateValue: template, isNull: template === null, isEmptyObj: JSON.stringify(template) === '{}' });
@@ -1501,6 +1652,60 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
                 return safeData.capturedTrafficCountriesImage || safeData.captured_traffic_countries_page || null;
             case '@captured_top_events_source_page':
                 return safeData.capturedTopEventsSourceImage || safeData.captured_top_events_source_page || null;
+            case '@uploaded_domain_page':
+                return safeData.uploadedDomainImage || null;
+            case '@uploaded_dns_page':
+                return safeData.uploadedDnsImage || null;
+            case '@uploaded_firewall_page':
+                return safeData.uploadedFirewallImage || null;
+            case '@uploaded_security_rules_page':
+                return safeData.uploadedSecurityRulesImage || null;
+            case '@uploaded_argo_page':
+                return safeData.uploadedArgoImage || null;
+            case '@uploaded_speed_page':
+                return safeData.uploadedSpeedImage || null;
+            case '@uploaded_speed_mobile_page':
+                return safeData.uploadedSpeedMobileImage || null;
+            case '@uploaded_request_traffic_page':
+                return safeData.uploadedTrafficImageSub1 || null;
+            case '@uploaded_data_transfer_traffic_page':
+                return safeData.uploadedTrafficImageSub2 || null;
+            case '@uploaded_page_views_traffic_page':
+                return safeData.uploadedTrafficImageSub3 || null;
+            case '@uploaded_visits_traffic_page':
+                return safeData.uploadedTrafficImageSub4 || null;
+            case '@uploaded_api_requests_traffic_page':
+                return safeData.uploadedTrafficImageSub5 || null;
+            case '@uploaded_traffic_page':
+                return safeData.uploadedTrafficImage || null;
+            case '@uploaded_bot_management':
+                return safeData.uploadedBotManagementImage || null;
+            case '@uploaded_security_level':
+                return safeData.uploadedSecurityLevelImage || null;
+            case '@uploaded_ssl_overview':
+                return safeData.uploadedSslOverviewImage || null;
+            case '@uploaded_ssl_edge':
+                return safeData.uploadedSslEdgeImage || safeData.uploadedMinTlsVersionImage || null;
+            case '@uploaded_min_tls_version':
+                return safeData.uploadedMinTlsVersionImage || safeData.uploadedSslEdgeImage || null;
+            case '@uploaded_tls_1_3':
+                return safeData.uploadedTls13Image || null;
+            case '@uploaded_browser_integrity':
+                return safeData.uploadedBrowserIntegrityImage || null;
+            case '@uploaded_load_balancing_spectrum':
+                return safeData.uploadedLoadBalancingSpectrumImage || null;
+            case '@uploaded_rate_limiting_page':
+                return safeData.uploadedRateLimitingImage || null;
+            case '@uploaded_managed_rules_page':
+                return safeData.uploadedManagedRulesImage || null;
+            case '@uploaded_ip_access_page':
+                return safeData.uploadedIpAccessImage || null;
+            case '@uploaded_zone_lockdown_page':
+                return safeData.uploadedZoneLockdownImage || null;
+            case '@uploaded_traffic_countries_page':
+                return safeData.uploadedTrafficCountriesImage || null;
+            case '@uploaded_top_events_source_page':
+                return safeData.uploadedTopEventsSourceImage || null;
             case '@DASHBOARD_IMAGE@':
                 return dashboardImage || safeData.dashboardImage || null;
             default:
@@ -1546,6 +1751,39 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
                         '@captured_top_events_source_page': s.topEventsSource
                     };
                     img = mapping[v.name] || null;
+                }
+                if (!img && dataRes && dataRes.success && dataRes.uploaded) {
+                    const u = dataRes.uploaded;
+                    const uploadedMapping = {
+                        '@uploaded_domain_page': u.domains,
+                        '@uploaded_dns_page': u.dns,
+                        '@uploaded_firewall_page': u.firewall,
+                        '@uploaded_security_rules_page': u.securityRules,
+                        '@uploaded_argo_page': u.argo,
+                        '@uploaded_speed_page': u.speed,
+                        '@uploaded_speed_mobile_page': u.speedMobile,
+                        '@uploaded_request_traffic_page': u.trafficSub1,
+                        '@uploaded_data_transfer_traffic_page': u.trafficSub2,
+                        '@uploaded_page_views_traffic_page': u.trafficSub3,
+                        '@uploaded_visits_traffic_page': u.trafficSub4,
+                        '@uploaded_api_requests_traffic_page': u.trafficSub5,
+                        '@uploaded_traffic_page': u.traffic,
+                        '@uploaded_bot_management': u.botManagement,
+                        '@uploaded_security_level': u.securityLevel,
+                        '@uploaded_ssl_overview': u.sslOverview,
+                        '@uploaded_ssl_edge': u.sslEdge || u.minTlsVersion,
+                        '@uploaded_min_tls_version': u.minTlsVersion || u.sslEdge,
+                        '@uploaded_tls_1_3': u.tls13,
+                        '@uploaded_browser_integrity': u.browserIntegrity,
+                        '@uploaded_load_balancing_spectrum': u.loadBalancingSpectrum,
+                        '@uploaded_rate_limiting_page': u.rateLimiting,
+                        '@uploaded_managed_rules_page': u.managedRules,
+                        '@uploaded_ip_access_page': u.ipAccess,
+                        '@uploaded_zone_lockdown_page': u.zoneLockdown,
+                        '@uploaded_traffic_countries_page': u.trafficCountries,
+                        '@uploaded_top_events_source_page': u.topEventsSource
+                    };
+                    img = uploadedMapping[v.name] || null;
                 }
             } catch (e) {
                 console.error('Failed to fetch saved screenshots:', e);
@@ -1678,12 +1916,12 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
     const domainDisplay = safeData.domain === 'ALL_SUBDOMAINS' ? `ทุก Subdomain ของ Domain ${safeData.zoneName || '...'}` : safeData.domain;
 
     // --- TEMPLATE PROCESSING ---
-    const getProcessedHtml = (isForExport = false) => {
+    const getProcessedHtml = (isForExport = false, inappImagesForExport = null) => {
         const baseTmpl = isEditing ? localTemplate : (template ?? '');
         console.log('DEBUG getProcessedHtml: baseTmpl length =', baseTmpl?.length, 'localTemplate length =', localTemplate?.length, 'template length =', template?.length);
         // Even for static template, we want to process date variables
-        let html = processTemplate(baseTmpl, { 
-            ...safeData, 
+        let html = processTemplate(baseTmpl, {
+            ...safeData,
             capturedDomainImage,
             trafficChangeText,
             trafficChangePct,
@@ -1700,7 +1938,7 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
             speedMobileIndex,
             speedMobileScorePct,
             speedMobileLevel
-        }, new Date(), dashboardImage);
+        }, new Date(), dashboardImage, inappImagesForExport);
         console.log('DEBUG getProcessedHtml: processed html length =', html?.length);
         const hasTOCPlaceholder = html.includes('@TOC@') || html.includes('@TOC');
         if (useAutoTOC || hasTOCPlaceholder) {
@@ -1792,7 +2030,11 @@ const ReportModal = ({ isOpen, onClose, data, dashboardImage, template, onSaveTe
             baseHtml = baseHtml.replaceAll('@TOC@', '').replaceAll('@TOC', '');
             tempDiv.innerHTML = baseHtml;
         } else {
-            let cloneHtml = getProcessedHtml(true); // Generates processed template with the black TOC at the correct @TOC@ placeholder location!
+            // Pre-render @inapp_* mockup tables to flat PNGs before export — see
+            // renderInappImagesForExport() above for why (the .docx converter mangles the nested
+            // tables/border-radius these mockups use for toggles & setting cards).
+            const inappImagesForExport = await renderInappImagesForExport(safeData);
+            let cloneHtml = getProcessedHtml(true, inappImagesForExport); // Generates processed template with the black TOC at the correct @TOC@ placeholder location!
             tempDiv.innerHTML = cloneHtml;
         }
 
@@ -4290,6 +4532,38 @@ export default function NTBCCFReportPage() {
     const [capturedBrowserIntegrityImage, setCapturedBrowserIntegrityImage] = useState(null);
     const [capturedLoadBalancingSpectrumImage, setCapturedLoadBalancingSpectrumImage] = useState(null);
 
+    // "@uploaded_*" manual-override images: the user uploads these themselves (from the control
+    // page's upload panel) as a substitute for the matching "@captured_*" screenshot — useful
+    // when they want to supply their own image, or when Cloudflare's dashboard UI changes and
+    // breaks the automated capture, so a report can still go out without a code fix first.
+    const [uploadedDomainImage, setUploadedDomainImage] = useState(null);
+    const [uploadedDnsImage, setUploadedDnsImage] = useState(null);
+    const [uploadedTrafficImage, setUploadedTrafficImage] = useState(null);
+    const [uploadedTrafficImageSub1, setUploadedTrafficImageSub1] = useState(null);
+    const [uploadedTrafficImageSub2, setUploadedTrafficImageSub2] = useState(null);
+    const [uploadedTrafficImageSub3, setUploadedTrafficImageSub3] = useState(null);
+    const [uploadedTrafficImageSub4, setUploadedTrafficImageSub4] = useState(null);
+    const [uploadedTrafficImageSub5, setUploadedTrafficImageSub5] = useState(null);
+    const [uploadedFirewallImage, setUploadedFirewallImage] = useState(null);
+    const [uploadedSecurityRulesImage, setUploadedSecurityRulesImage] = useState(null);
+    const [uploadedArgoImage, setUploadedArgoImage] = useState(null);
+    const [uploadedSpeedImage, setUploadedSpeedImage] = useState(null);
+    const [uploadedSpeedMobileImage, setUploadedSpeedMobileImage] = useState(null);
+    const [uploadedBotManagementImage, setUploadedBotManagementImage] = useState(null);
+    const [uploadedSecurityLevelImage, setUploadedSecurityLevelImage] = useState(null);
+    const [uploadedSslOverviewImage, setUploadedSslOverviewImage] = useState(null);
+    const [uploadedSslEdgeImage, setUploadedSslEdgeImage] = useState(null);
+    const [uploadedRateLimitingImage, setUploadedRateLimitingImage] = useState(null);
+    const [uploadedManagedRulesImage, setUploadedManagedRulesImage] = useState(null);
+    const [uploadedIpAccessImage, setUploadedIpAccessImage] = useState(null);
+    const [uploadedZoneLockdownImage, setUploadedZoneLockdownImage] = useState(null);
+    const [uploadedTrafficCountriesImage, setUploadedTrafficCountriesImage] = useState(null);
+    const [uploadedTopEventsSourceImage, setUploadedTopEventsSourceImage] = useState(null);
+    const [uploadedMinTlsVersionImage, setUploadedMinTlsVersionImage] = useState(null);
+    const [uploadedTls13Image, setUploadedTls13Image] = useState(null);
+    const [uploadedBrowserIntegrityImage, setUploadedBrowserIntegrityImage] = useState(null);
+    const [uploadedLoadBalancingSpectrumImage, setUploadedLoadBalancingSpectrumImage] = useState(null);
+
     // Load saved screenshots directly from server disk
     useEffect(() => {
         fetch('/api/ntbc-capture?action=get-saved')
@@ -4327,6 +4601,36 @@ export default function NTBCCFReportPage() {
                     if (s.tls13) setCapturedTls13Image(s.tls13);
                     if (s.browserIntegrity) setCapturedBrowserIntegrityImage(s.browserIntegrity);
                     if (s.loadBalancingSpectrum) setCapturedLoadBalancingSpectrumImage(s.loadBalancingSpectrum);
+                }
+                if (data.success && data.uploaded) {
+                    const u = data.uploaded;
+                    if (u.domains) setUploadedDomainImage(u.domains);
+                    if (u.dns) setUploadedDnsImage(u.dns);
+                    if (u.traffic) setUploadedTrafficImage(u.traffic);
+                    if (u.trafficSub1) setUploadedTrafficImageSub1(u.trafficSub1);
+                    if (u.trafficSub2) setUploadedTrafficImageSub2(u.trafficSub2);
+                    if (u.trafficSub3) setUploadedTrafficImageSub3(u.trafficSub3);
+                    if (u.trafficSub4) setUploadedTrafficImageSub4(u.trafficSub4);
+                    if (u.trafficSub5) setUploadedTrafficImageSub5(u.trafficSub5);
+                    if (u.firewall) setUploadedFirewallImage(u.firewall);
+                    if (u.securityRules) setUploadedSecurityRulesImage(u.securityRules);
+                    if (u.argo) setUploadedArgoImage(u.argo);
+                    if (u.speed) setUploadedSpeedImage(u.speed);
+                    if (u.speedMobile) setUploadedSpeedMobileImage(u.speedMobile);
+                    if (u.botManagement) setUploadedBotManagementImage(u.botManagement);
+                    if (u.securityLevel) setUploadedSecurityLevelImage(u.securityLevel);
+                    if (u.sslOverview) setUploadedSslOverviewImage(u.sslOverview);
+                    if (u.sslEdge) setUploadedSslEdgeImage(u.sslEdge);
+                    if (u.rateLimiting) setUploadedRateLimitingImage(u.rateLimiting);
+                    if (u.managedRules) setUploadedManagedRulesImage(u.managedRules);
+                    if (u.ipAccess) setUploadedIpAccessImage(u.ipAccess);
+                    if (u.zoneLockdown) setUploadedZoneLockdownImage(u.zoneLockdown);
+                    if (u.trafficCountries) setUploadedTrafficCountriesImage(u.trafficCountries);
+                    if (u.topEventsSource) setUploadedTopEventsSourceImage(u.topEventsSource);
+                    if (u.minTlsVersion) setUploadedMinTlsVersionImage(u.minTlsVersion);
+                    if (u.tls13) setUploadedTls13Image(u.tls13);
+                    if (u.browserIntegrity) setUploadedBrowserIntegrityImage(u.browserIntegrity);
+                    if (u.loadBalancingSpectrum) setUploadedLoadBalancingSpectrumImage(u.loadBalancingSpectrum);
                 }
             })
             .catch(e => {
@@ -5431,8 +5735,12 @@ export default function NTBCCFReportPage() {
         };
 
         let activeZones = zones;
+        let zoneFetchError = null;
         if (!activeZones || activeZones.length === 0 || !activeZones.find(z => z.id === activeZoneId)) {
-            try {
+            // The Cloudflare zone-list call can be transiently flaky (network blips, upstream
+            // 5xx). Retry once after a short delay before giving up, instead of immediately
+            // surfacing a misleading "Invalid Account or Zone configuration" error.
+            const fetchZonesOnce = async () => {
                 const result = await fetch('/api/scrape', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -5442,13 +5750,29 @@ export default function NTBCCFReportPage() {
                         apiToken: currentUser?.cloudflare_api_token || auth.getCurrentUser()?.cloudflare_api_token
                     })
                 });
-                const resData = await result.json();
-                if (resData.success && resData.data) {
-                    activeZones = resData.data;
-                    setZones(resData.data);
+                if (!result.ok) {
+                    throw new Error(`list-zones request failed with HTTP ${result.status}`);
                 }
+                const resData = await result.json();
+                if (!resData.success || !resData.data) {
+                    throw new Error(resData.message || resData.error || 'list-zones returned no data');
+                }
+                return resData.data;
+            };
+
+            try {
+                activeZones = await fetchZonesOnce();
+                setZones(activeZones);
             } catch (err) {
-                console.error('Failed to fetch zones dynamically:', err);
+                console.warn('First attempt to fetch zones dynamically failed, retrying once:', err);
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    activeZones = await fetchZonesOnce();
+                    setZones(activeZones);
+                } catch (retryErr) {
+                    console.error('Failed to fetch zones dynamically after retry:', retryErr);
+                    zoneFetchError = retryErr;
+                }
             }
         }
 
@@ -5461,7 +5785,15 @@ export default function NTBCCFReportPage() {
         }
 
         if (!activeAccountId || !activeZoneId || !domainName) {
-            Swal.fire('Error', 'Invalid Account or Zone configuration.', 'error');
+            if (zoneFetchError) {
+                Swal.fire(
+                    'Error',
+                    `Could not verify the account/zone with Cloudflare (likely a temporary network or API issue): ${zoneFetchError.message}. Please try again.`,
+                    'error'
+                );
+            } else {
+                Swal.fire('Error', 'Invalid Account or Zone configuration.', 'error');
+            }
             return;
         }
 
@@ -6808,7 +7140,34 @@ export default function NTBCCFReportPage() {
                     capturedMinTlsVersionImage,
                     capturedTls13Image,
                     capturedBrowserIntegrityImage,
-                    capturedLoadBalancingSpectrumImage
+                    capturedLoadBalancingSpectrumImage,
+                    uploadedDomainImage,
+                    uploadedDnsImage,
+                    uploadedTrafficImage,
+                    uploadedTrafficImageSub1,
+                    uploadedTrafficImageSub2,
+                    uploadedTrafficImageSub3,
+                    uploadedTrafficImageSub4,
+                    uploadedTrafficImageSub5,
+                    uploadedFirewallImage,
+                    uploadedSecurityRulesImage,
+                    uploadedArgoImage,
+                    uploadedSpeedImage,
+                    uploadedSpeedMobileImage,
+                    uploadedBotManagementImage,
+                    uploadedSecurityLevelImage,
+                    uploadedSslOverviewImage,
+                    uploadedSslEdgeImage,
+                    uploadedRateLimitingImage,
+                    uploadedManagedRulesImage,
+                    uploadedIpAccessImage,
+                    uploadedZoneLockdownImage,
+                    uploadedTrafficCountriesImage,
+                    uploadedTopEventsSourceImage,
+                    uploadedMinTlsVersionImage,
+                    uploadedTls13Image,
+                    uploadedBrowserIntegrityImage,
+                    uploadedLoadBalancingSpectrumImage
                 }}
                 dashboardImage={dashboardImage}
                 template={reportModalMode === 'static-template' ? staticReportTemplate : reportModalMode === 'middle-template' ? middleReportTemplate : reportTemplate}
@@ -6919,7 +7278,7 @@ export default function NTBCCFReportPage() {
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto w-full">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-6xl mx-auto w-full">
                     {/* WORKSPACE CARD 1: IMAGE SIZE & CROP SETTINGS */}
                     <div 
                         onClick={() => setIsImageSettingsModalOpen(true)}
@@ -6976,91 +7335,37 @@ export default function NTBCCFReportPage() {
                         </p>
                         <span className="text-purple-400 text-xs font-semibold uppercase tracking-wider group-hover:text-purple-300">Select & Capture &rarr;</span>
                     </div>
+
+                    {/* WORKSPACE CARD 4: BACKGROUND JOBS (moved out of the old Live Browser Monitor bar) */}
+                    <div
+                        onClick={() => setIsBackgroundJobsModalOpen(true)}
+                        className="group bg-gray-800/40 hover:bg-gradient-to-br hover:from-purple-900/30 hover:to-indigo-900/30 border border-gray-700/60 hover:border-purple-500/50 rounded-2xl p-8 cursor-pointer transition-all duration-300 relative overflow-hidden"
+                    >
+                        <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity transform group-hover:scale-110 duration-500">
+                            <Clock className="w-40 h-40 text-white" />
+                        </div>
+                        <div className="bg-purple-500/10 w-fit p-4 rounded-xl mb-6 border border-purple-500/20 group-hover:scale-110 transition-transform duration-300 relative">
+                            <Clock className="w-8 h-8 text-purple-400" />
+                            {isNtbcJobActive && (
+                                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-blue-400 animate-pulse border-2 border-gray-900" title="A job is currently processing" />
+                            )}
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3 group-hover:text-purple-300 transition-colors">Background Jobs</h3>
+                        <p className="text-gray-400 text-sm leading-relaxed mb-6">
+                            View and track report generation jobs currently running or queued in the background.
+                        </p>
+                        <span className="text-purple-400 text-xs font-semibold uppercase tracking-wider group-hover:text-purple-300">View Jobs &rarr;</span>
+                    </div>
                 </div>
 
-                {/* BIG SCREEN: LIVE BROWSER MONITOR */}
-                <div className="mt-10 w-full max-w-5xl mx-auto bg-gray-900/60 border border-gray-700/60 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md">
-                    {/* Monitor Top Control Bar */}
-                    <div className="px-6 py-4 border-b border-gray-800/80 bg-gray-900/80 flex flex-wrap items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
-                                <Monitor className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2.5">
-                                    <h3 className="text-base font-bold text-white tracking-wide">Live Browser Monitor</h3>
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${chromeRunning ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' : 'bg-yellow-500/15 border border-yellow-500/30 text-yellow-400'}`}>
-                                        <span className={`w-2 h-2 rounded-full ${chromeRunning ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'}`}></span>
-                                        {chromeRunning ? 'Active Stream (1920×1080)' : 'Browser Ready (Port 9222)'}
-                                    </span>
-                                </div>
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                    Interactive Chromium container session used for real-time Cloudflare navigation & screenshot capturing.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Top Bar Actions */}
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setMainVncStreamKey(Date.now())}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white text-xs font-medium transition-colors shadow-sm"
-                                title="Reconnect / Refresh Stream"
-                            >
-                                <RefreshCw className="w-3.5 h-3.5" /> Reconnect
-                            </button>
-                            <button
-                                onClick={() => handleQuickLaunchDebug()}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-amber-200 text-xs font-medium transition-colors shadow-sm cursor-pointer"
-                                title="Quick Cloudflare Login & Debug Session"
-                            >
-                                <Terminal className="w-3.5 h-3.5 text-amber-400" /> Quick Debug Session
-                            </button>
-                            <button
-                                onClick={() => handleOpenCloudflareHome()}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300 hover:text-blue-200 text-xs font-medium transition-colors shadow-sm cursor-pointer"
-                                title="Open Cloudflare Home Page"
-                            >
-                                <Globe className="w-3.5 h-3.5 text-blue-400" /> Cloudflare Home
-                            </button>
-                            <button
-                                onClick={() => setIsBackgroundJobsModalOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 hover:text-purple-200 text-xs font-medium transition-colors shadow-sm cursor-pointer relative"
-                                title="View Background Report Jobs"
-                            >
-                                <Clock className="w-3.5 h-3.5 text-purple-400" /> Background Jobs
-                                {isNtbcJobActive && (
-                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse border border-gray-900" title="A job is currently processing" />
-                                )}
-                            </button>
-                            <a
-                                href="/vnc/?autoconnect=1&resize=scale&path=websockify"
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-rose-200 text-xs font-medium transition-colors shadow-sm"
-                                title="Open Live Monitor in New Tab"
-                            >
-                                <ExternalLink className="w-3.5 h-3.5" /> Fullscreen Tab
-                            </a>
-                        </div>
+                {/* System Control — embedded inline right after the workspace cards so it's all on one page */}
+                <div className="mt-10 w-full">
+                    <div className="max-w-5xl mx-auto mb-3 flex items-center gap-2 px-1">
+                        <div className="h-px flex-1 bg-gray-800/80" />
+                        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">System Control</span>
+                        <div className="h-px flex-1 bg-gray-800/80" />
                     </div>
-
-                    {/* Main Big Display Iframe */}
-                    <div className="relative w-full bg-black flex flex-col items-center justify-center min-h-[580px] lg:min-h-[720px]">
-                        <div className="absolute top-3 left-3 z-10 pointer-events-none">
-                            <span className="px-2.5 py-1 rounded bg-black/70 backdrop-blur-sm border border-gray-800 text-[11px] font-mono text-gray-300 shadow-md">
-                                🔴 LIVE DISPLAY • 1920×1080
-                            </span>
-                        </div>
-                        {typeof window !== 'undefined' && (
-                            <iframe
-                                key={mainVncStreamKey}
-                                src={`${window.location.origin}/vnc/?autoconnect=1&resize=scale&path=websockify`}
-                                className="w-full h-[580px] lg:h-[720px] border-none"
-                                title="Live Browser Monitor"
-                            />
-                        )}
-                    </div>
+                    <ControlPage />
                 </div>
             </main>
         </div>

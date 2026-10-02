@@ -139,7 +139,7 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
     const cellFont = "font-family: 'Roboto', sans-serif;";
     const tagList = Array.isArray(tags) ? tags : [];
     const tagsHtml = tagList.map(t => (
-        `<span style="display: inline-block; ${cellFont} font-size: 11pt; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;">${t}</span>`
+        `<span style="display: inline-block; ${cellFont} font-size: 11pt; line-height: 1.4; vertical-align: middle; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;">${t}</span>`
     )).join('');
 
     return `${ROBOTO_FONT_IMPORT}<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; margin-top: 0; margin-bottom: 0; table-layout: fixed;">
@@ -246,7 +246,7 @@ export const generateRuleListTable = (title, columns, rows, emptyText) => {
             const isStatusCol = ['status', 'action', 'health', 'enabled', 'proxied'].includes(c.key);
             const pillStyle = isStatusCol ? statusPillStyle(value) : '';
             const inner = isStatusCol
-                ? `<span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: bold; font-size: 10pt; ${pillStyle}">${value}</span>`
+                ? `<span style="display: inline-block; padding: 4px 10px; border-radius: 999px; ${pillStyle}"><span style="position: relative; top: -8px; display: inline-block; font-weight: bold; font-size: 10pt; line-height: 1; white-space: nowrap;">${value}</span></span>`
                 : value;
             return `<td style="border: 1px solid #e5e7eb; padding: 8px 10px; ${cellFont} font-size: 11pt; color: #1f2937; ${idx === 0 ? 'font-weight: 600;' : ''}">${inner}</td>`;
         }).join('');
