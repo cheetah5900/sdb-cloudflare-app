@@ -14,6 +14,23 @@
 // report, but the final exported .docx will still render this text in TH SarabunPSK.
 const ROBOTO_FONT_IMPORT = "<style>@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');</style>";
 
+// Renders a genuine iPhone/iOS-style on/off switch: a solid-colour pill track (Apple's
+// systemGreen #34c759 when on, light systemGray5 #e9e9ea when off) with an ALWAYS-WHITE
+// circular knob that slides to the right when on / left when off, plus a soft drop shadow
+// under the knob for depth — matching the real iOS control pixel-for-pixel in spirit, not a
+// tinted-knob imitation. Shared by every @inapp_* renderer that shows a 2-state switch, so
+// Bot Management's ON/OFF, the TLS 1.3 / Browser Integrity / Argo toggle cards, and the
+// Status/Enabled/Proxied columns in rule-list tables all look identical.
+const buildIosToggleHtml = (isEnabled, trackWidth, trackHeight) => {
+    const w = trackWidth || 36;
+    const h = trackHeight || 20;
+    const knob = h - 4;
+    const trackColor = isEnabled ? '#34c759' : '#e9e9ea';
+    return `<table style="border-collapse: collapse; width: ${w}px; height: ${h}px; background-color: ${trackColor}; border-radius: ${h / 2}px;"><tbody>
+        <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: ${knob}px; height: ${knob}px; background-color: #ffffff; border-radius: 50%; margin: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.35);">&nbsp;</span></td></tr>
+    </tbody></table>`;
+};
+
 // Generic placeholder ("mockup") table for an @inapp_* variable whose real layout/data has
 // not been specified yet.
 export const generateMockupTable = (label) => {
@@ -51,8 +68,6 @@ export const generatePreviewNotWiredNote = (label) => {
 // Generates an HTML table that visually mimics a Cloudflare-style on/off toggle switch.
 // Reusable for any @inapp_* variable that is a boolean/toggle-style setting.
 export const generateToggleTable = (label, isEnabled, statusText) => {
-    const trackColor = isEnabled ? '#86efac' : '#d1d5db';
-    const knobColor = isEnabled ? '#16a34a' : '#9ca3af';
     const bgColor = isEnabled ? '#dcfce7' : '#f3f4f6';
     const textColor = isEnabled ? '#166534' : '#4b5563';
     const displayStatus = statusText || (isEnabled ? 'Enabled' : 'Disabled');
@@ -64,11 +79,7 @@ export const generateToggleTable = (label, isEnabled, statusText) => {
                 <td style="${cellStyle} width: 65%;">${label}</td>
                 <td style="${cellStyle} width: 35%; text-align: center; background-color: ${bgColor};">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
-                            <table style="border-collapse: collapse; width: 34px; height: 18px; background-color: ${trackColor}; border-radius: 9px;"><tbody>
-                                <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: 14px; height: 14px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
-                            </tbody></table>
-                        </td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; font-family: 'Roboto', sans-serif; font-size: 14pt; font-weight: bold; color: ${textColor};">${displayStatus}</td>
                     </tr></tbody></table>
                 </td>
@@ -105,8 +116,6 @@ export const generateSettingCardDropdown = (title, description, valueText) => {
 // generateSettingCardDropdown but with a switch instead of a dropdown box.
 export const generateSettingCardToggle = (title, description, isEnabled, statusText) => {
     const cellFont = "font-family: 'Roboto', sans-serif;";
-    const trackColor = isEnabled ? '#86efac' : '#d1d5db';
-    const knobColor = isEnabled ? '#16a34a' : '#9ca3af';
     const textColor = isEnabled ? '#166534' : '#6b7280';
     const displayStatus = statusText || (isEnabled ? 'Enabled' : 'Disabled');
 
@@ -119,11 +128,7 @@ export const generateSettingCardToggle = (title, description, isEnabled, statusT
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 32%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
-                            <table style="border-collapse: collapse; width: 34px; height: 18px; background-color: ${trackColor}; border-radius: 9px;"><tbody>
-                                <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: 14px; height: 14px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
-                            </tbody></table>
-                        </td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; ${cellFont} font-size: 13pt; font-weight: bold; color: ${textColor};">${displayStatus}</td>
                     </tr></tbody></table>
                 </td>
@@ -142,11 +147,9 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
         `<span style="display: inline-block; ${cellFont} font-size: 11pt; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;"><span style="position: relative; top: -7px; display: inline-block; line-height: 1; white-space: nowrap;">${t}</span></span>`
     )).join('');
 
-    // Two-state status (ON/OFF) rendered as an iPhone-style green toggle switch, matching
+    // Two-state status (ON/OFF) rendered as a genuine iOS-style toggle switch, matching
     // the look used by generateSettingCardToggle for every other 2-state setting card.
     const isEnabled = badgeText === 'ON' || badgeText === 'Enabled' || badgeText === true;
-    const trackColor = isEnabled ? '#86efac' : '#d1d5db';
-    const knobColor = isEnabled ? '#16a34a' : '#9ca3af';
     const textColor = isEnabled ? '#166534' : '#6b7280';
 
     return `${ROBOTO_FONT_IMPORT}<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; margin-top: 0; margin-bottom: 0; table-layout: fixed;">
@@ -159,11 +162,7 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
                 </td>
                 <td style="border: none; padding: 16px 20px; width: 22%; background-color: #f3f4f6; vertical-align: middle; text-align: center;">
                     <table style="border-collapse: collapse; margin: 0 auto;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
-                            <table style="border-collapse: collapse; width: 34px; height: 18px; background-color: ${trackColor}; border-radius: 9px;"><tbody>
-                                <tr><td style="border: none; padding: 0; text-align: ${isEnabled ? 'right' : 'left'};"><span style="display: inline-block; width: 14px; height: 14px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
-                            </tbody></table>
-                        </td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(isEnabled, 36, 20)}</td>
                         <td style="border: none; padding: 0 0 0 6px; vertical-align: middle; ${cellFont} font-size: 13pt; font-weight: bold; color: ${textColor};">${badgeText}</td>
                     </tr></tbody></table>
                 </td>
@@ -270,15 +269,9 @@ export const generateRuleListTable = (title, columns, rows, emptyText) => {
             let inner = value;
             if (isToggleCol) {
                 const on = isTwoStateOn(value);
-                const trackColor = on ? '#86efac' : '#d1d5db';
-                const knobColor = on ? '#16a34a' : '#9ca3af';
                 const textColor = on ? '#166534' : '#6b7280';
                 inner = `<table style="border-collapse: collapse; display: inline-table; vertical-align: middle;"><tbody><tr>
-                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">
-                            <table style="border-collapse: collapse; width: 28px; height: 15px; background-color: ${trackColor}; border-radius: 8px;"><tbody>
-                                <tr><td style="border: none; padding: 0; text-align: ${on ? 'right' : 'left'};"><span style="display: inline-block; width: 11px; height: 11px; background-color: ${knobColor}; border-radius: 50%; margin: 2px;">&nbsp;</span></td></tr>
-                            </tbody></table>
-                        </td>
+                        <td style="border: none; padding: 0 6px 0 0; vertical-align: middle;">${buildIosToggleHtml(on, 28, 16)}</td>
                         <td style="border: none; padding: 0; vertical-align: middle; ${cellFont} font-size: 10pt; font-weight: bold; color: ${textColor}; white-space: nowrap;">${value}</td>
                     </tr></tbody></table>`;
             } else if (isPillCol) {
