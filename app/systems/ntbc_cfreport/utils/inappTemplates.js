@@ -139,7 +139,7 @@ export const generateTagCounterCard = (title, description, tags, badgeText) => {
     const cellFont = "font-family: 'Roboto', sans-serif;";
     const tagList = Array.isArray(tags) ? tags : [];
     const tagsHtml = tagList.map(t => (
-        `<span style="display: inline-block; ${cellFont} font-size: 11pt; line-height: 1.4; vertical-align: middle; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;">${t}</span>`
+        `<span style="display: inline-block; ${cellFont} font-size: 11pt; color: #374151; background-color: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 999px; padding: 3px 12px; margin: 2px 6px 2px 0;"><span style="position: relative; top: -7px; display: inline-block; line-height: 1; white-space: nowrap;">${t}</span></span>`
     )).join('');
 
     return `${ROBOTO_FONT_IMPORT}<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; margin-top: 0; margin-bottom: 0; table-layout: fixed;">
