@@ -398,9 +398,30 @@ const buildInappHtmlMap = (safeData) => ({
         { label: 'SSL Mode', value: safeData.sslMode && safeData.sslMode !== 'unknown' ? (safeData.sslMode.charAt(0).toUpperCase() + safeData.sslMode.slice(1)) : 'Unknown' },
         { label: 'DNS Records', value: safeData.dnsRecordsStatus === 'Enabled' ? 'Active' : (safeData.dnsRecordsStatus || 'Unknown') },
     ]),
-    '@inapp_dns_page': generateStatGrid('DNS Records', [
-        { label: 'Status', value: safeData.dnsRecordsStatus || 'Unknown' },
-    ]),
+    '@inapp_dns_page': (() => {
+        // Full record list (type / name / content / proxy status), matching the real
+        // Cloudflare "DNS > Records" page that @captured_dns_page screenshots. safeData.dnsRecords
+        // already holds the proxied-only records fetched for the report (same source as the
+        // classic @DNS_RECORDS_ROWS table).
+        const dnsRows = (safeData.dnsRecords || []).map(r => ({
+            type: r.type || '-',
+            name: r.name || '-',
+            content: r.content || '-',
+            proxied: r.proxied === true ? 'Proxied' : 'DNS only',
+        }));
+        return generateRuleListTable(
+            'DNS Records',
+            [
+                { key: 'type', label: 'Type' },
+                { key: 'name', label: 'Name' },
+                { key: 'content', label: 'Content' },
+                { key: 'proxied', label: 'Proxy status' },
+            ],
+            dnsRows,
+            'ไม่พบ DNS Record ในระบบ (No DNS records found)',
+            dnsRows.length || 8
+        );
+    })(),
     '@inapp_firewall_page': generateStatGrid('Security Analytics Overview', [
         { label: 'DDoS Protection', value: safeData.ddosProtection || 'Unknown' },
         { label: 'Leaked Credentials Check', value: safeData.leakedCredentials || 'Unknown' },

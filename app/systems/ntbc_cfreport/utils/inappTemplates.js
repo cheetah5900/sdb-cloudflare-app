@@ -251,11 +251,10 @@ const statusPillStyle = (status) => {
 // Access Rules, etc.): a header row of column labels, then one row per rule with the last
 // column rendered as a coloured status pill. Falls back to a "no rules configured" row when
 // there is no real data yet.
-export const generateRuleListTable = (title, columns, rows, emptyText) => {
+export const generateRuleListTable = (title, columns, rows, emptyText, maxRows = 8) => {
     const cellFont = "font-family: 'Roboto', sans-serif;";
     const cols = Array.isArray(columns) ? columns : [];
     const data = Array.isArray(rows) ? rows : [];
-    const maxRows = 8;
 
     const headerHtml = cols.map(c => (
         `<td style="border: 1px solid #e5e7eb; padding: 8px 10px; background-color: #f9fafb; ${cellFont} font-size: 11pt; font-weight: bold; color: #374151;">${c.label}</td>`
@@ -391,10 +390,30 @@ export const getInappPreviewHtml = (tabId, zoneSettings, extra) => {
             );
         }
 
-        case 'dns':
-            return generateStatGrid('DNS Records', [
-                { label: 'Total Records', value: zs.dnsRecordsCount ?? '-' },
-            ]);
+        case 'dns': {
+            // Full record list (type / name / content / proxy status), same shape as the real
+            // Cloudflare "DNS > Records" page the @captured_dns_page screenshot shows. The
+            // records themselves come from the separate get-dns-records fetch (not part of
+            // zoneSettings), passed through via `extra.dnsRecords`.
+            const dnsRows = (ex.dnsRecords || []).map(r => ({
+                type: r.type || '-',
+                name: r.name || '-',
+                content: r.content || '-',
+                proxied: r.proxied === true ? 'Proxied' : 'DNS only',
+            }));
+            return generateRuleListTable(
+                'DNS Records',
+                [
+                    { key: 'type', label: 'Type' },
+                    { key: 'name', label: 'Name' },
+                    { key: 'content', label: 'Content' },
+                    { key: 'proxied', label: 'Proxy status' },
+                ],
+                dnsRows,
+                'ไม่พบ DNS Record ในระบบ (No DNS records found)',
+                dnsRows.length || 8
+            );
+        }
 
         case 'zoneLockdown':
             return generateStatGrid('Zone Lockdown Rules', [

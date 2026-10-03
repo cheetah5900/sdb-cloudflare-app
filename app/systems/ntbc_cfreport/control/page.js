@@ -103,6 +103,7 @@ export default function ControlPage() {
      const [inappLoadBalancers, setInappLoadBalancers] = useState(null);
      const [inappSpeedResult, setInappSpeedResult] = useState(null);
      const [inappTrafficData, setInappTrafficData] = useState(null);
+    const [inappDnsRecords, setInappDnsRecords] = useState(null);
      const [isCapturingAll, setIsCapturingAll] = useState(false);
      const [captureAllStatus, setCaptureAllStatus] = useState({ current: 0, total: 21, currentLabel: '' });
      const abortCaptureAllRef = useRef(false);
@@ -930,6 +931,22 @@ export default function ControlPage() {
             return;
         }
 
+        if (tabId === 'dns') {
+            if (inappDnsRecords && !forceRefresh) return;
+            setIsLoadingInappPreview(true);
+            try {
+                const res = await callAPI('get-dns-records', { zoneId: envZone });
+                if (res && res.data) {
+                    setInappDnsRecords(res.data);
+                }
+            } catch (err) {
+                console.error('Failed to load DNS records for inapp preview:', err);
+            } finally {
+                setIsLoadingInappPreview(false);
+            }
+            return;
+        }
+
         if (tabId === 'speed') {
             // Live browser status, not a cacheable REST fetch — always re-check.
             // NOTE: this endpoint legitimately returns success:false for 'waiting'/'error'/'running'
@@ -1070,6 +1087,7 @@ export default function ControlPage() {
         setInappZoneSettings(null);
         setInappLoadBalancers(null);
         setInappTrafficData(null);
+        setInappDnsRecords(null);
         // Speed Test status is intentionally NOT cleared here: it reflects the live debug
         // browser's last run, which is independent of zone/date/subdomain selection.
         if (capturePreviewMode === 'inapp') {
@@ -2837,6 +2855,7 @@ export default function ControlPage() {
                                                                 loadBalancers: inappLoadBalancers,
                                                                 speedResult: inappSpeedResult,
                                                                 trafficData: inappTrafficData,
+                                                                dnsRecords: inappDnsRecords,
                                                             }) }}
                                                         />
                                                     )}
