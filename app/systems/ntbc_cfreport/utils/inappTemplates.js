@@ -146,6 +146,52 @@ export const generateSettingCardToggle = (title, description, isEnabled, statusT
     </table>`;
 };
 
+// Replicates the Cloudflare "DDoS Protection" section of the Security > Settings page: three
+// stacked feature cards (HTTP / Network-layer / SSL/TLS DDoS attack protection). Each card has
+// the title + a small "docs" badge, a description, optional links, a "DDoS attacks" tag chip,
+// and on the right a green iOS-style toggle with an "Always active" caption. DDoS protection
+// is always on for every Cloudflare zone, so the toggles are rendered ON unless a status other
+// than 'Always On'/'Enable'/'Active' is passed for that card.
+export const generateDdosProtectionCards = (statuses = {}) => {
+    const cellFont = "font-family: 'Roboto', sans-serif;";
+    const isOn = (v) => !v || ['Always On', 'Enable', 'Enabled', 'Active', 'on', true].includes(v);
+    const cards = [
+        { key: 'http', title: 'HTTP DDoS attack protection',
+          desc: 'Ruleset managed by Cloudflare that automatically mitigates HTTP-based DDoS attacks. HTTP DDoS attack protection is always enabled. To customize the ruleset behavior, create a DDoS override.',
+          links: ['View ruleset', 'Configure overrides'] },
+        { key: 'network', title: 'Network-layer DDoS attack protection',
+          desc: 'Automatic mitigation of network-layer DDoS attacks such as ACK floods, SYN-ACK amplification attacks, UDP attacks, ICMP attacks and DDoS attacks launched by botnets such as Mirai.',
+          links: [] },
+        { key: 'ssl', title: 'SSL/TLS DDoS attack protection',
+          desc: 'Automatic mitigation of SSL/TLS based DDoS attacks and encryption-based attacks such as DDoS attacks, SSL exhaustion floods, and SSL negotiation attacks.',
+          links: [] },
+    ];
+    const cardHtml = (c) => {
+        const on = isOn(statuses[c.key]);
+        const linksHtml = c.links.length
+            ? `<div style="${cellFont} font-size: 12pt; color: #0b57d0; margin-bottom: 10px;">${c.links.map(l => `<span style="margin-right: 14px;">${l}</span>`).join('')}</div>`
+            : '';
+        const tag = `<span style="display: inline-block; ${cellFont} font-size: 11pt; color: #374151; background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 999px; padding: 3px 12px;"><span style="position: relative; top: -7px; display: inline-block; line-height: 1; white-space: nowrap;">&#9679; DDoS attacks</span></span>`;
+        return `<table width="100%" style="width: 100%; border-collapse: collapse; border: 1px solid #d1d5db; border-radius: 6px; margin: 0 0 18px 0; table-layout: fixed;">
+        <tbody>
+            <tr>
+                <td style="border: none; padding: 18px 22px; width: 82%; background-color: #ffffff; vertical-align: top;">
+                    <div style="${cellFont} font-size: 16pt; font-weight: bold; color: #1f2937; margin-bottom: 10px;">${c.title}</div>
+                    <div style="${cellFont} font-size: 12pt; color: #374151; line-height: 1.45; margin-bottom: 10px;">${c.desc}</div>
+                    ${linksHtml}
+                    <div>${tag}</div>
+                </td>
+                <td style="border: none; padding: 18px 22px; width: 18%; background-color: #ffffff; vertical-align: top; text-align: center;">
+                    ${buildIosToggleHtml(on, 51, 31)}
+                    <div style="${cellFont} font-size: 10pt; color: ${on ? '#374151' : '#6b7280'}; margin-top: 4px;">${on ? 'Always active' : 'Off'}</div>
+                </td>
+            </tr>
+        </tbody>
+    </table>`;
+    };
+    return `${ROBOTO_FONT_IMPORT}${cards.map(cardHtml).join('\n')}`;
+};
+
 // Replicates a Cloudflare "feature card with pill tags + a counter badge" layout, e.g. Bot
 // Management's "Super Bot Fight Mode" card (title, description, a row of pill-shaped tags,
 // and a rounded counter badge on the far right).
@@ -533,6 +579,9 @@ export const getInappPreviewHtml = (tabId, zoneSettings, extra) => {
                 { label: 'IP Access', value: td.fwEvents?.access ?? 0 },
             ]);
         }
+        case 'ddos':
+            return generateDdosProtectionCards({ http: zs.httpDdosProtection, network: zs.networkDdosProtection, ssl: zs.sslTlsDdosProtection });
+
         case 'loadBalancingSpectrum':
             return generateRuleListTable(
                 'Manage Public Load Balancers',

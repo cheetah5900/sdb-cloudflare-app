@@ -37,6 +37,7 @@ import {
     generateToggleTable,
     generateSettingCardDropdown,
     generateSettingCardToggle,
+    generateDdosProtectionCards,
     generateTagCounterCard,
     generateStatGrid,
     generateRuleListTable,
@@ -512,6 +513,7 @@ const buildInappHtmlMap = (safeData) => ({
         safeData.browserIntegrityCheck === 'Enabled'
     ),
     '@inapp_load_balancing_spectrum': generateMockupTable('Load Balancing and Spectrum'),
+    '@inapp_ddos_protection_page': generateDdosProtectionCards({ http: safeData.httpDdosProtection, network: safeData.networkDdosProtection, ssl: safeData.sslTlsDdosProtection }),
     '@inapp_rate_limiting_page': generateRuleListTable(
         `Rate Limiting Rules (${safeData.rateLimits?.status || 'None'})`,
         [
