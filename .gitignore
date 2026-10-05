@@ -85,3 +85,4 @@ next-env.d.ts
 *.bak
 .fuse_hidden*
 /Claude outputs/
+/app/data/ntbc_templates.json
