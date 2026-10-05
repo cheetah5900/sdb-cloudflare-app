@@ -80,3 +80,8 @@ next-env.d.ts
 /scripts/test-all/tmp_downloads/
 /.ocr_verification_results/
 /.gls_ocr_verification_results/
+
+# Local/transient files
+*.bak
+.fuse_hidden*
+/Claude outputs/
