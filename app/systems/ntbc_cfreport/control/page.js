@@ -12,6 +12,7 @@ import Swal from '../utils/alert';
 import { Editor } from '@tinymce/tinymce-react';
 import { REPORT_VARIABLES, STATIC_VARIABLES } from '../variableDefinitions';
 import { getInappPreviewHtml } from '../utils/inappTemplates';
+import { UPLOADED_SLOTS } from '../utils/uploadedVariables';
 import { DELAY_CONFIG } from '@/lib/delay-config';
 import { auth } from '@/app/utils/auth';
 import { getUserProfileAction } from '@/app/actions/authActions';
@@ -33,6 +34,10 @@ export default function ControlPage() {
     const [activeStep, setActiveStep] = useState(0);
     const [logs, setLogs] = useState([]);
     const [activeCaptureTab, setActiveCaptureTab] = useState('domains');
+    // Top-level page section: 'setup' (environment + launch debug browser), 'capture'
+    // (live monitor + captured/inapp/uploaded preview), 'console' (debug log). Splits what used
+    // to be one very long two-column scroll into three focused views.
+    const [activeMainTab, setActiveMainTab] = useState('setup');
     const vncIframeRef = useRef(null);
     const [isVncMaximized, setIsVncMaximized] = useState(false);
 
@@ -98,6 +103,9 @@ export default function ControlPage() {
      const [isCapturingDirect, setIsCapturingDirect] = useState(false);
      // 'screenshot' shows the real captured image; 'inapp' shows the app-generated @inapp_* table preview
      const [capturePreviewMode, setCapturePreviewMode] = useState('screenshot');
+    const [uploadedImages, setUploadedImages] = useState({});
+    const [uploadingImageId, setUploadingImageId] = useState(null);
+    const [uploadImageError, setUploadImageError] = useState(null);
      const [inappZoneSettings, setInappZoneSettings] = useState(null);
      const [isLoadingInappPreview, setIsLoadingInappPreview] = useState(false);
      const [inappLoadBalancers, setInappLoadBalancers] = useState(null);
@@ -1096,6 +1104,71 @@ export default function ControlPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [envZone, envStartDate, envEndDate, envSubdomain]);
 
+    // Manual "@uploaded_X" image upload: lets the user supply their own image for a report
+    // section, bypassing automated capture entirely (useful when Cloudflare's UI changes, or
+    // the user just wants to paste in their own screenshot). Stored server-side under
+    // db/captured/uploaded-<slug>.png via POST /api/ntbc-capture, independent of the
+    // captured-<slug>.png files used by @captured_X.
+    const handleUploadImage = (id, file) => {
+        if (!file) return;
+        setUploadImageError(null);
+        setUploadingImageId(id);
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const imageBase64 = reader.result;
+                const response = await fetch('/api/ntbc-capture', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'save-uploaded', id, imageBase64 }),
+                });
+                const data = await response.json();
+                if (data && data.success) {
+                    setUploadedImages(prev => ({ ...prev, [id]: data.image }));
+                } else {
+                    setUploadImageError((data && data.error) || 'อัปโหลดรูปไม่สำเร็จ');
+                }
+            } catch (err) {
+                console.error('Failed to upload image:', err);
+                setUploadImageError('อัปโหลดรูปไม่สำเร็จ: ' + err.message);
+            } finally {
+                setUploadingImageId(null);
+            }
+        };
+        reader.onerror = () => {
+            setUploadImageError('ไม่สามารถอ่านไฟล์รูปภาพได้');
+            setUploadingImageId(null);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleRemoveUploadedImage = async (id) => {
+        setUploadImageError(null);
+        setUploadingImageId(id);
+        try {
+            const response = await fetch('/api/ntbc-capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete-uploaded', id }),
+            });
+            const data = await response.json();
+            if (data && data.success) {
+                setUploadedImages(prev => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+            } else {
+                setUploadImageError((data && data.error) || 'ลบรูปไม่สำเร็จ');
+            }
+        } catch (err) {
+            console.error('Failed to delete uploaded image:', err);
+            setUploadImageError('ลบรูปไม่สำเร็จ: ' + err.message);
+        } finally {
+            setUploadingImageId(null);
+        }
+    };
+
     // Load Subdomains (DNS Records)
     const loadSubdomainsForZone = async (zoneId) => {
         if (!zoneId) return;
@@ -1279,6 +1352,9 @@ export default function ControlPage() {
                             }));
                         }
                     }
+                    if (data.success && data.uploaded) {
+                        setUploadedImages(data.uploaded);
+                    }
                 })
                 .catch(e => {
                     console.error('Failed to load saved screenshots from server disk:', e);
@@ -1413,7 +1489,7 @@ export default function ControlPage() {
                 title: `${steps[index].name} Completed`,
                 text: 'All captures finished successfully.',
                 icon: 'success',
-                position: 'center',
+                position: 'top-end',
                 timer: 2000,
                 showConfirmButton: false,
                 background: '#111827',
@@ -2459,6 +2535,13 @@ export default function ControlPage() {
             <p className="text-[10px] text-gray-500 mt-2 font-mono">
                 Connecting VNC display at: {vncUrl}
             </p>
+            <p className="text-[10px] text-gray-500 mt-1.5 flex items-start gap-1.5">
+                <Sliders className="w-3 h-3 text-gray-600 shrink-0 mt-0.5" />
+                <span>
+                    ก่อนแคปภาพทุกครั้ง ระบบจะ<strong className="text-gray-400">ขยาย (ไม่พับ)</strong> เมนูด้านข้างของหน้าเว็บ Cloudflare ให้เปิดเต็มเสมอ
+                    (ถ้าตรวจพบว่าเมนูถูกพับอยู่ จะกดคีย์ลัด t แล้ว s เพื่อขยายให้อัตโนมัติ) เพื่อให้ภาพที่แคปออกมาหน้าตาสม่ำเสมอทุกครั้ง
+                </span>
+            </p>
         </div>
     );
 
@@ -2493,10 +2576,37 @@ export default function ControlPage() {
             {/* VNC Card rendering when maximized */}
             {isVncMaximized && renderVncCard()}
 
+            {/* Main section tabs — keeps the page from being one long scroll: pick one view
+                instead of scrolling past Environment Settings, the monitor, capture/preview and
+                the debug console all stacked in one column. */}
+            <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-none shrink-0">
+                {[
+                    { id: 'setup', label: '⚙️ ตั้งค่า & เริ่มต้น' },
+                    { id: 'capture', label: '📸 แคปภาพ & พรีวิว' },
+                    { id: 'console', label: '🪵 Debug Console' },
+                ].map((tab) => (
+                    <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveMainTab(tab.id)}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer border ${
+                            activeMainTab === tab.id
+                                ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-900/30'
+                                : 'bg-gray-900/60 text-gray-400 hover:text-gray-200 border-gray-800 hover:border-gray-700'
+                        }`}
+                    >
+                        {tab.label}
+                        {tab.id === 'setup' && !isEnvReady && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="ยังไม่ได้ตั้งค่า Account/Zone" />
+                        )}
+                    </button>
+                ))}
+            </div>
+
             {/* Dashboard Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
                 {/* Steps and Environment Section (Left) */}
-                <div className="lg:col-span-8 space-y-6 flex flex-col">
+                <div className={`${activeMainTab === 'capture' ? 'lg:col-span-12' : 'hidden'} space-y-6 flex flex-col`}>
                     {/* Live Browser Monitor Card */}
                     {!isVncMaximized && renderVncCard()}
 
@@ -2836,10 +2946,81 @@ export default function ControlPage() {
                                                             <RefreshCw className={`w-3 h-3 ${isLoadingInappPreview ? 'animate-spin' : ''}`} />
                                                         </button>
                                                     )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCapturePreviewMode('upload')}
+                                                        className={`px-2.5 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
+                                                            capturePreviewMode === 'upload'
+                                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                                                : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                                                        }`}
+                                                        title="อัปโหลดรูปภาพเอง (ใช้แทนภาพแคปอัตโนมัติ)"
+                                                    >
+                                                        🖼️ อัปโหลดเอง
+                                                    </button>
                                                 </div>
                                             </div>
 
-                                            {capturePreviewMode === 'inapp' ? (
+                                            {capturePreviewMode === 'upload' ? (
+                                                (() => {
+                                                    const slot = UPLOADED_SLOTS.find(s => s.id === activeCaptureTab);
+                                                    const slotId = slot ? slot.id : activeCaptureTab;
+                                                    const currentUploaded = uploadedImages[slotId];
+                                                    const isBusy = uploadingImageId === slotId;
+                                                    return (
+                                                        <div className="rounded-xl border border-emerald-800/60 bg-gray-950/60 p-4 flex flex-col gap-3">
+                                                            <p className="text-[11px] text-gray-400">
+                                                                อัปโหลดรูปภาพของคุณเองสำหรับส่วนนี้ ใช้แทนภาพแคปอัตโนมัติหรือ inapp — เหมาะกรณีต้องการแคปเอง หรือหน้า Cloudflare เปลี่ยนแปลงจนแคปอัตโนมัติใช้ไม่ได้ชั่วคราว
+                                                                {slot && (
+                                                                    <> (ตัวแปร: <code className="text-emerald-300">{slot.varName}</code>)</>
+                                                                )}
+                                                            </p>
+                                                            {uploadImageError && (
+                                                                <p className="text-[11px] text-rose-400">{uploadImageError}</p>
+                                                            )}
+                                                            {currentUploaded ? (
+                                                                <div className="rounded-xl border border-gray-800/80 bg-black flex items-center justify-center p-2 overflow-hidden group relative">
+                                                                    <img src={currentUploaded} className="max-w-full rounded h-auto max-h-[380px] object-contain" alt="Uploaded" />
+                                                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-opacity duration-300">
+                                                                        <button type="button" onClick={() => openImageInNewTab(currentUploaded)} className="px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-bold hover:bg-emerald-700 transition-colors cursor-pointer">
+                                                                            View Full Image
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={isBusy}
+                                                                            onClick={() => handleRemoveUploadedImage(slotId)}
+                                                                            className="px-3 py-1.5 bg-rose-600 text-white rounded text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            {isBusy ? 'กำลังลบ...' : 'ลบรูป'}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="py-16 px-4 text-center bg-gray-950/40 rounded-2xl border border-dashed border-gray-800 flex flex-col items-center justify-center gap-3">
+                                                                    <div className="w-12 h-12 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-500">
+                                                                        <Camera className="w-6 h-6" />
+                                                                    </div>
+                                                                    <p className="text-sm font-bold text-gray-300">ยังไม่มีรูปภาพที่อัปโหลด</p>
+                                                                </div>
+                                                            )}
+                                                            <label className={`self-start px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer border ${isBusy ? 'opacity-40 cursor-not-allowed border-gray-800 text-gray-500' : 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10'}`}>
+                                                                {isBusy ? 'กำลังอัปโหลด...' : (currentUploaded ? '🖼️ เปลี่ยนรูปภาพ' : '🖼️ อัปโหลดรูปภาพ')}
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    disabled={isBusy}
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files && e.target.files[0];
+                                                                        if (file) handleUploadImage(slotId, file);
+                                                                        e.target.value = '';
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                        </div>
+                                                    );
+                                                })()
+                                            ) : capturePreviewMode === 'inapp' ? (
                                                 <div className="rounded-xl border border-indigo-800/60 bg-gray-950/60 p-4 overflow-auto">
                                                     {isLoadingInappPreview ? (
                                                         <div className="flex items-center justify-center gap-2 py-10 text-xs text-gray-400">
@@ -3069,9 +3250,9 @@ export default function ControlPage() {
                 </div>
 
                 {/* Console Log Section (Right) */}
-                <div className="lg:col-span-4 flex flex-col gap-6">
+                <div className={`${activeMainTab === 'capture' ? 'hidden' : 'lg:col-span-12'} flex flex-col gap-6`}>
                     {/* Console / Log output */}
-                    <div className="bg-gray-950 border border-gray-800 rounded-2xl p-4 flex flex-col h-[460px] shadow-2xl relative">
+                    <div className={`bg-gray-950 border border-gray-800 rounded-2xl p-4 flex flex-col h-[460px] shadow-2xl relative ${activeMainTab === 'console' ? '' : 'hidden'}`}>
                         <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-3">
                             <div className="flex items-center gap-2">
                                 <Terminal className="w-4 h-4 text-rose-500" />
@@ -3098,7 +3279,7 @@ export default function ControlPage() {
                         </div>
                     </div>
                     {/* Live status info / Active Environment */}
-                    <div id="active-env-settings-card" className="bg-gradient-to-br from-rose-950/20 to-gray-900/40 border border-gray-800/80 rounded-2xl p-6 shadow-xl scroll-mt-6">
+                    <div id="active-env-settings-card" className={`bg-gradient-to-br from-rose-950/20 to-gray-900/40 border border-gray-800/80 rounded-2xl p-6 shadow-xl scroll-mt-6 ${activeMainTab === 'setup' ? '' : 'hidden'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-gray-800/40 pb-3 gap-2">
                             <div className="flex items-center gap-2.5 flex-wrap">
                                 <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
@@ -3205,7 +3386,7 @@ export default function ControlPage() {
                     </div>
 
                     {/* Step 1: Launch Debug Browser Card */}
-                    <div className="bg-gradient-to-br from-gray-900/60 to-gray-950/80 border border-gray-800/80 rounded-2xl p-6 shadow-xl flex flex-col gap-4">
+                    <div className={`bg-gradient-to-br from-gray-900/60 to-gray-950/80 border border-gray-800/80 rounded-2xl p-6 shadow-xl flex flex-col gap-4 ${activeMainTab === 'setup' ? '' : 'hidden'}`}>
                         <div className="flex items-center justify-between border-b border-gray-800/40 pb-3">
                             <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
                                 <Chrome className="w-4 h-4 text-rose-500" />

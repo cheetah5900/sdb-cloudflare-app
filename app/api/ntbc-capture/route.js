@@ -2,6 +2,7 @@ import { connectChrome } from '@/lib/chrome-helper';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { UPLOADED_SLUGS } from '@/app/systems/ntbc_cfreport/utils/uploadedVariables';
 
 export const dynamic = 'force-dynamic';
 
@@ -305,10 +306,52 @@ export async function GET(request) {
                 }
             }
 
+            // User-uploaded manual overrides ("@uploaded_*" template variables). Same id/file
+            // naming convention as the captured screenshots above, just with an "uploaded-"
+            // prefix instead of "captured-" — see app/systems/ntbc_cfreport/utils/uploadedVariables.js
+            // for the canonical id list this must stay in sync with.
+            const uploaded = {};
+            const uploadedMetadata = {};
+            const uploadedTabs = tabs.map(item => ({ id: item.id, file: item.file.replace('captured-', 'uploaded-') }));
+            for (const item of uploadedTabs) {
+                const p1 = path.join(dbCapturedDir, item.file);
+                if (fs.existsSync(p1)) {
+                    try {
+                        const buf = fs.readFileSync(p1);
+                        uploaded[item.id] = `data:image/png;base64,${buf.toString('base64')}`;
+                        uploadedMetadata[item.id] = { uploadedAt: fs.statSync(p1).mtime.toISOString() };
+                    } catch (e) {
+                        console.error(`Failed to read uploaded ${p1}:`, e);
+                    }
+                }
+            }
+            // "traffic" is already covered by uploadedTabs above (it's in the base `tabs` list).
+            // DNS is not in `tabs` (captured DNS is handled separately, multi-page) — uploads
+            // only support a single override image for DNS, so read it directly here.
+            const uploadedDnsPath = path.join(dbCapturedDir, 'uploaded-dns.png');
+            if (fs.existsSync(uploadedDnsPath)) {
+                try {
+                    uploaded['dns'] = `data:image/png;base64,${fs.readFileSync(uploadedDnsPath).toString('base64')}`;
+                    uploadedMetadata['dns'] = { uploadedAt: fs.statSync(uploadedDnsPath).mtime.toISOString() };
+                } catch (e) {}
+            }
+            for (let i = 1; i <= 5; i++) {
+                const subFile = `uploaded-traffic-sub${i}.png`;
+                const p1 = path.join(dbCapturedDir, subFile);
+                if (fs.existsSync(p1)) {
+                    try {
+                        uploaded[`trafficSub${i}`] = `data:image/png;base64,${fs.readFileSync(p1).toString('base64')}`;
+                        uploadedMetadata[`trafficSub${i}`] = { uploadedAt: fs.statSync(p1).mtime.toISOString() };
+                    } catch (e) {}
+                }
+            }
+
             return Response.json({
                 success: true,
                 screenshots,
-                metadata
+                metadata,
+                uploaded,
+                uploadedMetadata
             });
         }
 
@@ -2269,6 +2312,67 @@ export async function GET(request) {
         return Response.json(responseData);
     } catch (e) {
         console.error('Puppeteer remote capture error:', e);
+        return Response.json({ success: false, error: e.message }, { status: 500 });
+    }
+}
+
+// Handles the "@uploaded_*" manual-override images: the user picks a file themselves (in the
+// control page's upload panel) instead of relying on the automated Puppeteer capture. Kept as
+// a separate, much simpler action than the capture flow above — just decode a data URL and
+// write/delete a PNG on disk, no Chrome/Puppeteer involved.
+export async function POST(request) {
+    try {
+        const body = await request.json();
+        const { action, id } = body;
+
+        if (!id || !UPLOADED_SLUGS[id]) {
+            return Response.json({ success: false, error: `Unknown uploaded-image id: ${id}` }, { status: 400 });
+        }
+
+        const dbCapturedDir = path.join(process.cwd(), 'db', 'captured');
+        if (!fs.existsSync(dbCapturedDir)) {
+            try { fs.mkdirSync(dbCapturedDir, { recursive: true }); } catch (e) {}
+        }
+        const filePath = path.join(dbCapturedDir, `uploaded-${UPLOADED_SLUGS[id]}.png`);
+
+        if (action === 'save-uploaded') {
+            const { imageBase64 } = body;
+            if (!imageBase64 || typeof imageBase64 !== 'string') {
+                return Response.json({ success: false, error: 'Missing imageBase64' }, { status: 400 });
+            }
+            const match = imageBase64.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+            const rawBase64 = match ? match[1] : imageBase64;
+            let buffer;
+            try {
+                buffer = Buffer.from(rawBase64, 'base64');
+                if (buffer.length === 0) throw new Error('Decoded buffer is empty');
+            } catch (e) {
+                return Response.json({ success: false, error: `Invalid image data: ${e.message}` }, { status: 400 });
+            }
+            // Normalize to PNG via sharp regardless of the source format (jpeg/webp/etc.),
+            // same as the automated capture path does, so downstream <img> embedding and the
+            // docx export pipeline see a consistent format.
+            const pngBuffer = await sharp(buffer).png().toBuffer();
+            fs.writeFileSync(filePath, pngBuffer);
+            return Response.json({
+                success: true,
+                id,
+                image: `data:image/png;base64,${pngBuffer.toString('base64')}`
+            });
+        }
+
+        if (action === 'delete-uploaded') {
+            if (fs.existsSync(filePath)) {
+                try { fs.unlinkSync(filePath); } catch (e) {
+                    return Response.json({ success: false, error: `Failed to delete: ${e.message}` }, { status: 500 });
+                }
+            }
+            return Response.json({ success: true, id });
+        }
+
+        return Response.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
+    } catch (e) {
+        console.error('Uploaded-image save/delete error:', e);
         return Response.json({ success: false, error: e.message }, { status: 500 });
     }
 }

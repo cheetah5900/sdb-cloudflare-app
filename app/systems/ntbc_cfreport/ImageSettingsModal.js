@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Settings, RotateCcw, Download, Sliders, Shield, Lock, Activity, Globe, Check } from 'lucide-react';
 import Swal from './utils/alert';
 
-export const IMAGE_CONFIG_ITEMS = [
+const CAPTURED_IMAGE_ITEMS = [
     { key: 'domains', varTag: '@captured_domain_page', label: 'Domain Overview (Sites)', desc: 'ภาพรวมหน้ารวมไซต์โดเมนทั้งหมด', category: 'domains', defaultWidth: 605, defaultCoords: { xStart: '395', xEnd: '1785', yStart: '85', yEnd: '' } },
     { key: 'dns', varTag: '@captured_dns_page', label: 'DNS Records', desc: 'ภาพรายการบันทึก DNS Records ทั้งหมด', category: 'domains', defaultWidth: 605, defaultCoords: { xStart: '365', xEnd: '1843', yStart: '95', yEnd: '' } },
     { key: 'botManagement', varTag: '@captured_bot_management', label: 'Bot Management', desc: 'ภาพกล่องการตั้งค่า Bot Management (Super Bot Fight Mode)', category: 'security', defaultWidth: 605, defaultCoords: { xStart: '350', xEnd: '1880', yStart: '95', yEnd: '750' } },
@@ -28,11 +28,38 @@ export const IMAGE_CONFIG_ITEMS = [
     { key: 'dashboard', varTag: '@DASHBOARD_IMAGE', label: 'Full Dashboard Snapshot', desc: 'ภาพรวม Dashboard Snapshot ทั้งหมด (@DASHBOARD_IMAGE)', category: 'domains', defaultWidth: 504, defaultCoords: { xStart: '', xEnd: '', yStart: '', yEnd: '' } }
 ];
 
+// Every "@captured_X" screenshot slot also has an "@inapp_X" (app-generated mockup table) and
+// "@uploaded_X" (user-uploaded image) counterpart — see variableDefinitions.js / uploadedVariables.js.
+// All three need their own configurable export width so a user can size the inapp table or their
+// uploaded image the same way they size a real screenshot. Crop coordinates only make sense for a
+// real screenshot (they describe where Puppeteer crops the captured page), so the derived inapp/
+// uploaded items intentionally carry no defaultCoords, and the modal hides that section for them.
+const deriveVariantItem = (item, variant, variantLabel) => ({
+    key: `${variant}_${item.key}`,
+    varTag: item.varTag.replace('@captured_', `@${variant}_`),
+    label: `${item.label} (${variantLabel})`,
+    desc: item.desc,
+    category: item.category,
+    type: variant,
+    defaultWidth: item.defaultWidth,
+});
+
+const CAPTURED_ONLY_ITEMS = CAPTURED_IMAGE_ITEMS.filter(i => i.key !== 'dashboard').map(i => ({ ...i, type: 'captured' }));
+const DASHBOARD_ITEM = { ...CAPTURED_IMAGE_ITEMS.find(i => i.key === 'dashboard'), type: 'dashboard' };
+
+export const IMAGE_CONFIG_ITEMS = [
+    ...CAPTURED_ONLY_ITEMS,
+    ...CAPTURED_ONLY_ITEMS.map(i => deriveVariantItem(i, 'inapp', 'inapp')),
+    ...CAPTURED_ONLY_ITEMS.map(i => deriveVariantItem(i, 'uploaded', 'อัปโหลดเอง')),
+    DASHBOARD_ITEM,
+];
+
 const DEFAULT_WIDTHS = Object.fromEntries(IMAGE_CONFIG_ITEMS.map(i => [i.key, i.defaultWidth]));
-const DEFAULT_COORDS = Object.fromEntries(IMAGE_CONFIG_ITEMS.map(i => [i.key, { ...i.defaultCoords }]));
+const DEFAULT_COORDS = Object.fromEntries(IMAGE_CONFIG_ITEMS.filter(i => i.defaultCoords).map(i => [i.key, { ...i.defaultCoords }]));
 
 export default function ImageSettingsModal({ isOpen, onClose, theme }) {
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedType, setSelectedType] = useState('all');
     const [widths, setWidths] = useState(DEFAULT_WIDTHS);
     const [coords, setCoords] = useState(DEFAULT_COORDS);
 
@@ -183,9 +210,9 @@ export default function ImageSettingsModal({ isOpen, onClose, theme }) {
         button: 'bg-gray-800 text-gray-300'
     };
 
-    const filteredItems = selectedCategory === 'all' 
-        ? IMAGE_CONFIG_ITEMS 
-        : IMAGE_CONFIG_ITEMS.filter(i => i.category === selectedCategory);
+    const filteredItems = IMAGE_CONFIG_ITEMS
+        .filter(i => selectedCategory === 'all' || i.category === selectedCategory)
+        .filter(i => selectedType === 'all' || i.type === selectedType);
 
     return (
         <div
@@ -209,7 +236,7 @@ export default function ImageSettingsModal({ isOpen, onClose, theme }) {
                                 </span>
                             </div>
                             <p className={`text-xs ${t.subText} mt-0.5`}>
-                                กำหนดขนาดความกว้าง (Width px) และพิกัด Crop หน้าจอสำหรับรายงาน Word (ไม่เชื่อมโยงค่าอัตโนมัติกับ Debug Setting)
+                                กำหนดขนาดความกว้าง (Width px) สำหรับทั้ง 📸 ภาพแคปจริง, 🧩 inapp และ 🖼️ อัปโหลดเอง — และพิกัด Crop หน้าจอสำหรับภาพแคปจริง (ไม่เชื่อมโยงค่าอัตโนมัติกับ Debug Setting)
                             </p>
                         </div>
                     </div>
@@ -257,6 +284,31 @@ export default function ImageSettingsModal({ isOpen, onClose, theme }) {
                     </button>
                 </div>
 
+                {/* Variable-type filter: captured / inapp / uploaded each have their own width setting now */}
+                <div className="px-5 py-2.5 border-b border-gray-800/80 bg-gray-950/20 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+                    <span className="text-[11px] text-gray-500 font-semibold shrink-0">ประเภทตัวแปร:</span>
+                    {[
+                        { id: 'all', label: 'ทั้งหมด' },
+                        { id: 'captured', label: '📸 ภาพแคปจริง' },
+                        { id: 'inapp', label: '🧩 inapp' },
+                        { id: 'uploaded', label: '🖼️ อัปโหลดเอง' },
+                        { id: 'dashboard', label: 'Dashboard' },
+                    ].map((tp) => (
+                        <button
+                            key={tp.id}
+                            type="button"
+                            onClick={() => setSelectedType(tp.id)}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
+                                selectedType === tp.id
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                    : 'text-gray-500 hover:text-gray-300 border border-transparent'
+                            }`}
+                        >
+                            {tp.label}
+                        </button>
+                    ))}
+                </div>
+
                 {/* Items List */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
                     <div className="grid grid-cols-1 gap-3.5">
@@ -271,6 +323,12 @@ export default function ImageSettingsModal({ isOpen, onClose, theme }) {
                                                 <span className="text-[11px] font-mono text-purple-400 bg-purple-950/60 border border-purple-800/50 px-2 py-0.5 rounded">
                                                     {item.varTag}
                                                 </span>
+                                                {item.type === 'inapp' && (
+                                                    <span className="text-[10px] font-bold text-indigo-300 bg-indigo-950/60 border border-indigo-800/50 px-1.5 py-0.5 rounded">🧩 inapp</span>
+                                                )}
+                                                {item.type === 'uploaded' && (
+                                                    <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-800/50 px-1.5 py-0.5 rounded">🖼️ อัปโหลดเอง</span>
+                                                )}
                                             </div>
                                             <p className={`text-xs ${t.subText || 'text-gray-400'} mt-1`}>{item.desc}</p>
                                         </div>
@@ -290,8 +348,8 @@ export default function ImageSettingsModal({ isOpen, onClose, theme }) {
                                         </div>
                                     </div>
 
-                                    {/* Crop Coordinates Grid */}
-                                    {item.key !== 'dashboard' && (
+                                    {/* Crop Coordinates Grid — only meaningful for real screenshots (Puppeteer crop area) */}
+                                    {item.type === 'captured' && (
                                         <div className="mt-3 pt-3 border-t border-gray-800/60 grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-gray-950/40 p-2.5 rounded-lg">
                                             <div className="flex flex-col gap-1">
                                                 <span className="text-[10px] text-gray-400 font-mono">X-Start (px)</span>
